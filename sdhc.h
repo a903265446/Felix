@@ -442,14 +442,14 @@ typedef struct SdhcAdma2Descriptor {
 /* Support external dma */
 #define SDHC_SUPPORT_EXDMA                  (1U << 7U)
 /*! 
- * @brief Structure to save the attribute of SDHC */
-typedef struct SdhcAttribute
+ * @brief Structure to save the capability inforamtion of SDHC */
+typedef struct SdhcCapability
 {
-    uint8_t specVer;              /*!< Specification version */
-    uint8_t vendorVer;            /*!< Verdor version */
-    uint16_t maxBlkLen;           /*!< Max block length */
-    uint32_t capabilityMask;      /*!< Logic or of capability flag bit mask defined above */
-} sdhc_attribute_t;
+    uint32_t specVer;           /*!< Specification version */
+    uint32_t vendorVer;         /*!< Verdor version */
+    uint32_t maxBlkLen;        /*!< Max block length */
+    uint32_t supportMask;      /*!< Logic or of support flag bit mask defined above */
+} sdhc_capability_t;
 
 
 /********************SDHC dynamical setting related structure*********************/
@@ -462,14 +462,14 @@ typedef struct SdhcSdClkConfig
 } sdhc_sd_clk_config_t;
 
 /*! @brief Structure to fill command argument/transfer type/data block register content */
-typedef struct SdhcCmdReq
+typedef struct SdhcCmdConfig
 {
     uint32_t dataBlkSize; /*!< Cmd data Block size */
     uint32_t dataBlkCount;/*!< Cmd data Block count */
     uint32_t argument;    /*!< Cmd argument defined as the card's specification */
-    uint8_t cmdIndex;     /*!< Cmd index defined as the card's specification */
+    uint32_t cmdIndex;     /*!< Cmd index defined as the card's specification */
     uint32_t cmdFlags;    /*!< Logic or of the bit mask from SDHC_ENABLE_DMA to SDHC_DATA_PRESENT */
-} sdhc_cmd_req_t;
+} sdhc_cmd_config_t;
 
 
 /********************SDHC initialization setting related structure*********************/
@@ -570,7 +570,7 @@ typedef struct SdhcRequest
 #define SDHC_REQ_ERR_TIMEOUT          (1 << 13) /*!< Request timeout error */
 #define SDHC_REQ_ERR_DATA_PREPARE     (1 << 14) /*!< Data preparation error */
     uint32_t response[4];                           /*!< Response for this command */
-    bool completeFlag;                              /*!< Request completion flag set in ISR */
+    volatile bool completeFlag;                     /*!< Request completion flag set in ISR */
     struct SdhcData *data;                          /*!< Data associated with request */
 } sdhc_request_t;
 
@@ -578,7 +578,7 @@ typedef struct SdhcRequest
 typedef struct SdhcHost
 {
     /* Data */
-    sdhc_attribute_t* attribute;
+    sdhc_capability_t* capability;                  /*!< Capability information */
     volatile sdhc_request_t * currentReq;           /*!< Associated request */
 
     /* Callback */
@@ -622,12 +622,12 @@ void SDHC_Reset(SDHC_Type * base);
 
 /**********SDHC get static attribute(will not change dynamically) functions***************/
 /*!
-* @brief Get the attribute information of SDHC
+* @brief Get the capability information of SDHC
 *
 * @param base SDHC base address
-* @attribute the structure to save the attribute information of SDHC
+* @attribute the structure to save the capability information of SDHC
 */
-void SDHC_GetAttribute(SDHC_Type * base, sdhc_attribute_t* attribute);
+void SDHC_GetCapability(SDHC_Type * base, sdhc_capability_t* capability);
 
 
 /********************SDHC dynamical setting/getting related functions*********************/
@@ -652,13 +652,22 @@ uint32_t SDHC_ResetSpecificBlock(SDHC_Type * base, uint32_t resetType,
 void SDHC_SetSdClock(SDHC_Type * base, const sdhc_sd_clk_config_t* sdClkConfig);
 
 /*!
-* @brief Sends 80 clocks to the card to initialize the card.
+* @brief Sends 80 clocks to the card to set it to be active state.
+*
+* When either of the PRSSTAT[CIHB] and PRSSTAT[CDIHB] bits are set, writing 1
+* to this bit is ignored, that is, when command line or data lines are active, 
+* write to this bit is not allowed. On the otherhand, when this bit is set, that is, 
+* during intialization active period, it is allowed to issue command, and the 
+* command bit stream will appear on the CMD pad after all 80 clock cycles are done. 
+* So when this command ends, the driver can make sure the 80 clock cycles are sent out. 
+* This is very useful when the driver needs send 80 cycles to the card and does
+* not want to wait till this bit is self-cleared.
 *
 * @param base SDHC base address
 * @param timeout timeout to initialize card
 * @return 0 on success, else on error
 */
-uint32_t SDHC_InitCard(SDHC_Type * base, uint32_t timeout);
+uint32_t SDHC_SetCardActive(SDHC_Type * base, uint32_t timeout);
 
 
 /***************Transfer parameter setting related functions******************/
@@ -711,6 +720,25 @@ static inline void SDHC_SetContinueRequest(SDHC_Type * base)
 
 /********************Transfer related functions*********************/
 /*!
+* @brief Sets command to be sent.
+*
+* This function fills command related argument/transfer type/data block register content.
+*
+* @param base SDHC base address
+* @param cmdReq command request structure
+*/
+void SDHC_SetCommand(SDHC_Type * base, const sdhc_cmd_config_t* cmdReq);
+
+/*!
+* @brief Gets the command response.
+*
+* @param base SDHC base address
+* @param index the index of response register, range from 0 to 3
+* @return response register content
+*/
+uint32_t SDHC_GetResponse(SDHC_Type * base, uint32_t index);
+
+/*!
 * @brief Fills the the data port.
 *
 * This function manily used to implement the data transfer by data port
@@ -738,34 +766,17 @@ static inline uint32_t SDHC_GetData(SDHC_Type * base)
     return SDHC_RD_DATPORT(base);
 }
 
-/*!
-* @brief Sends command to card.
-*
-* @param base SDHC base address
-* @param cmdReq command request structure
-*/
-void SDHC_SendCmd(SDHC_Type * base, const sdhc_cmd_req_t* cmdReq);
-
-/*!
-* @brief Gets the command response.
-*
-* @param base SDHC base address
-* @param index the index of response register, range from 0 to 3
-* @return response register content
-*/
-uint32_t SDHC_GetResponse(SDHC_Type * base, uint32_t index);
-
 /***************interrupt flag/status setting/getting related functions*****************/
 /*!
-* @brief Gets current sdhc's state.
+* @brief Gets present sdhc's state.
 *
-* Gets current card's state which is the logic or of some bits mask defined 
+* Gets present sdhc's state which is the logic or of some bits mask defined 
 * from SDHC_CMD_INHIBIT to SDHC_DATA7_LINE_LEVEL.
 *
 * @param base SDHC base address
-* @return current sdhc's state
+* @return present sdhc's state
 */
-static inline uint32_t SDHC_GetCurState(SDHC_Type * base)
+static inline uint32_t SDHC_GetPresentState(SDHC_Type * base)
 {
     return SDHC_RD_PRSSTAT(base);
 }
@@ -787,7 +798,7 @@ void SDHC_SetIntSignal(SDHC_Type * base, bool enable, uint32_t intMask);
 /*!
 * @brief Enables the specified interrupt state.
 *
-* Setting the interrupt state register bit to 1 will enable the corresponding 
+* Setting the interrupt status register bit to 1 will enable the corresponding 
 * interrupt status to be set by the specified event.This function can set multiple
 * interrupt state enable bits by using the bit mask defined from SDHC_CMD_COMPLETE_INT 
 * to SDHC_DMA_ERR_INT.
@@ -884,13 +895,14 @@ sdhc_status_t SDHC_InitHost(SDHC_Type * base, const sdhc_config_t* hostConfig,
                     sdhc_host_t* host);
 
 /*!
-* @brief Shoudowns the communication between the host and card.
+* @brief Deinitializes the host.
 *
-* Disables the sd bus clock/host clock/interrupt etc.
+* Disables the sd bus clock/host clock/interrupt etc to shoudowns the communication 
+* between the host and card..
 *
 * @param base SDHC base address
 */ 
-sdhc_status_t SDHC_ShutDownCommunication(SDHC_Type * base);
+sdhc_status_t SDHC_DeInitHost(SDHC_Type * base);
 
 /*!
  * @brief Checks whether the card is present on a specified host controller.
@@ -903,38 +915,43 @@ sdhc_status_t SDHC_ShutDownCommunication(SDHC_Type * base);
 sdhc_status_t SDHC_DetectCard(SDHC_Type * base);
 
 /*!
- * @brief Issues the request on a specific host controller and returns on completion.
+ * @brief Sends the command on a specific host controller and returns on completion.
  *
- * This function issues the request to the card on a specific SDHC.
- * The command  is sent and is blocked as long as
- * the response/data is sending back from the card.
+ * This function sents the command to the card on a specific SDHC, gets the command 
+ * response and read/write the data until read/write complete from the card.
+ * The command is sent and is blocked as long as the response/data is sending back 
+ * from the card.
  *
  * @param base SDHC base address
  * @param timeoutInMs timeout value in microseconds
  * @param host the host state inforamtion
  * @return kStatus_SDHC_NoError on success
  */
-sdhc_status_t SDHC_IssueRequestBlocking(SDHC_Type * base, uint32_t timeoutInMs, 
+sdhc_status_t SDHC_SendCommandBlocking(SDHC_Type * base, uint32_t timeoutInMs, 
                                     sdhc_host_t* host);
 
 /*!
- * @brief Issues the request on a specific host controller and returns on completion.
+ * @brief Sends the command on a specific host controller and returns immediately.
  *
- * This function  issues the request to the card on a specific SDHC.
- * The command  is sent and is blocked as long as
- * the response/data is sending back from the card.
+ * This function sents the command to the card on a specific SDHC.
+ * The command is sent and host will not wait the command response from the card.
+ * Command response and read/write data operation will be done in ISR instead of
+ * in this function.
  *
  * @param base SDHC base address
  * @param host the host state inforamtion
  * @return kStatus_SDHC_NoError on success
  */
-sdhc_status_t SDHC_IssueRequestNonBlocking(SDHC_Type * base, sdhc_host_t* host);
+sdhc_status_t SDHC_SendCommandNonBlocking(SDHC_Type * base, sdhc_host_t* host);
 
 /*!
 * @brief Checks the transfer status.
 *
 * This function checks if the transfer complete by checking the complete flag in the
-* host state structure which will be set in ISR.
+* host state structure which will be set in ISR. It mainly used to implement the 
+* non-blocking sending command. Transfer complete indicates that command response
+* has been sent from the card and read/write operation to the card has been completed
+* by the host.
 *
 * @param base SDHC base address
 * @param host the host state inforamtion
