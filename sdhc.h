@@ -27,10 +27,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef __FSL_SDHC_H__
-#define __FSL_SDHC_H__
+#ifndef __SDHC_H__
+#define __SDHC_H__
 
-#include <assert.h>
 #include <stdbool.h>
 #include "fsl_device_registers.h"
 #if FSL_FEATURE_SOC_SDHC_COUNT
@@ -526,66 +525,6 @@ typedef struct SdhcConfig
 } sdhc_config_t;
 
 /********************SDHC high level related structure*****************/
-/*!
- * @brief SDHC Data Structure
- *
- * Defines the SDHC data structure including the block size/count and flags.
- */
-typedef struct SdhcData
-{
-    uint32_t blockSize;                             /*!< Block size */
-    uint32_t blockCount;                            /*!< Block count */
-    uint32_t bytesTransferred;                      /*!< Transferred buffer */
-    uint32_t *buffer;                               /*!< Data buffer */
-} sdhc_data_t;
-
-/*!
- * @brief SDHC Request Structure
- *
- * Defines the SDHC request structure including the command index, argument, flags, response, and data.
- */
-typedef struct SdhcRequest
-{
-    uint32_t cmdIndex;                              /*!< Command index */
-    uint32_t argument;                              /*!< Command argument */
-    uint32_t flags;                                 /*!< Flags */
-#define SDHC_REQ_FLAGS_DATA_READ      (1 << 0)  /*!< Request will read data */
-#define SDHC_REQ_FLAGS_USE_DMA        (1 << 1)  /*!< Request will use DMA for data transferring */
-#define SDHC_REQ_FLAGS_STOP_TRANS     (1 << 2)  /*!< Request to stop transmition */ 
-    sdhc_resp_type_t respType;                      /*!< Response type */
-    volatile uint32_t error;                        /*!< Command error code */
-#define SDHC_REQ_ERR_HOST_BUSY        (1 << 0)  /*!< Host is busy */
-#define SDHC_REQ_ERR_SEND_CMD         (1 << 1)  /*!< Send command error */
-#define SDHC_REQ_ERR_CMD_CRC          (1 << 2)  /*!< Command CRC error */
-#define SDHC_REQ_ERR_CMD_INDEX        (1 << 3)  /*!< Command index error */
-#define SDHC_REQ_ERR_CMD_END_BIT      (1 << 4)  /*!< Command end bit error */
-#define SDHC_REQ_ERR_CMD_TIMEOUT      (1 << 5)  /*!< Command timeout error */
-#define SDHC_REQ_ERR_CARD_REMOVED     (1 << 6)  /*!< Card removed */
-#define SDHC_REQ_ERR_RSPBUSY_TIMEOUT  (1 << 7)  /*!< Response busy timeout error */
-#define SDHC_REQ_ERR_DAT_TIMEOUT      (1 << 8)  /*!< Data timeout error */
-#define SDHC_REQ_ERR_DATA_CRC         (1 << 9)  /*!< Data CRC error */
-#define SDHC_REQ_ERR_DATA_END_BIT     (1 << 10) /*!< Data end bit error */
-#define SDHC_REQ_ERR_AUTO_CMD12       (1 << 11) /*!< Auto cmd12 error */
-#define SDHC_REQ_ERR_DMA              (1 << 12) /*!< DMA error */
-#define SDHC_REQ_ERR_TIMEOUT          (1 << 13) /*!< Request timeout error */
-#define SDHC_REQ_ERR_DATA_PREPARE     (1 << 14) /*!< Data preparation error */
-    uint32_t response[4];                           /*!< Response for this command */
-    volatile bool completeFlag;                     /*!< Request completion flag set in ISR */
-    struct SdhcData *data;                          /*!< Data associated with request */
-} sdhc_request_t;
-
-/*! @brief state structure to save host information and callback */
-typedef struct SdhcHost
-{
-    /* Data */
-    sdhc_capability_t* capability;                  /*!< Capability information */
-    volatile sdhc_request_t * currentReq;           /*!< Associated request */
-
-    /* Callback */
-    void (*cardIntCallback)(void);                  /*!< Callback function for card interrupt occurs */
-    void (*cardDetectCallback)(bool inserted);      /*!< Callback function for card detect occurs */
-    void (*blockGapCallback)(void);                 /*!< Callback function for block gap occurs */
-} sdhc_host_t;
 
 /*************************************************************************************************
  * API
@@ -888,91 +827,20 @@ static inline void SDHC_SetForceEventFlags(SDHC_Type * base, uint32_t eventMask)
 *
 * @param base SDHC base address
 * @param hostConfig the host configuration
-* @param host the structure to save the host's attribute
 * @return kStatus_SDHC_NoError if success
 */
-sdhc_status_t SDHC_InitHost(SDHC_Type * base, const sdhc_config_t* hostConfig, 
-                    sdhc_host_t* host);
+sdhc_status_t SDHC_InitHost(SDHC_Type * base, const sdhc_config_t* hostConfig);
 
 /*!
 * @brief Deinitializes the host.
 *
 * Disables the sd bus clock/host clock/interrupt etc to shoudowns the communication 
-* between the host and card..
+* between the host and card.
 *
 * @param base SDHC base address
 */ 
 sdhc_status_t SDHC_DeInitHost(SDHC_Type * base);
 
-/*!
- * @brief Checks whether the card is present on a specified host controller.
- *
- * This function checks if there's a card inserted in the SDHC. It is mainly 
- * used in the polling detection pin mode.
- *
- * @param base SDHC base address
- */
-sdhc_status_t SDHC_DetectCard(SDHC_Type * base);
-
-/*!
- * @brief Sends the command on a specific host controller and returns on completion.
- *
- * This function sents the command to the card on a specific SDHC, gets the command 
- * response and read/write the data until read/write complete from the card.
- * The command is sent and is blocked as long as the response/data is sending back 
- * from the card.
- *
- * @param base SDHC base address
- * @param timeoutInMs timeout value in microseconds
- * @param host the host state inforamtion
- * @return kStatus_SDHC_NoError on success
- */
-sdhc_status_t SDHC_SendCommandBlocking(SDHC_Type * base, uint32_t timeoutInMs, 
-                                    sdhc_host_t* host);
-
-/*!
- * @brief Sends the command on a specific host controller and returns immediately.
- *
- * This function sents the command to the card on a specific SDHC.
- * The command is sent and host will not wait the command response from the card.
- * Command response and read/write data operation will be done in ISR instead of
- * in this function.
- *
- * @param base SDHC base address
- * @param host the host state inforamtion
- * @return kStatus_SDHC_NoError on success
- */
-sdhc_status_t SDHC_SendCommandNonBlocking(SDHC_Type * base, sdhc_host_t* host);
-
-/*!
-* @brief Checks the transfer status.
-*
-* This function checks if the transfer complete by checking the complete flag in the
-* host state structure which will be set in ISR. It mainly used to implement the 
-* non-blocking sending command. Transfer complete indicates that command response
-* has been sent from the card and read/write operation to the card has been completed
-* by the host.
-*
-* @param base SDHC base address
-* @param host the host state inforamtion
-* @return the transfer complete status
-*      -true: The transfer complete.
-*      -false: The transfer has not complete.
-*/
-static inline bool SDHC_IsTransferComplete(SDHC_Type * base, sdhc_host_t* host)
-{
-    return (host->currentReq.completeFlag);
-}
-
-/*!
- * @brief IRQ handler for SDHC
- *
- * This function deals with IRQs on the given host controller.
- *
- * @param base SDHC base address
- * @param host the host state inforamtion
- */
-void SDHC_DRV_IrqHandler(SDHC_Type * base, sdhc_host_t* host);
 
 /*@} */
 #if defined(__cplusplus)
@@ -980,9 +848,9 @@ void SDHC_DRV_IrqHandler(SDHC_Type * base, sdhc_host_t* host);
 #endif
 /*! @} */
 
-#endif
+#endif  /* FSL_FEATURE_SOC_SDHC_COUNT */
 
-#endif
+#endif /* __SDHC_H__*/
 /*************************************************************************************************
  * EOF
  ************************************************************************************************/
