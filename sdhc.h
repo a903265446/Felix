@@ -254,11 +254,11 @@ typedef enum _sdhc_dma_mode {
 } sdhc_dma_mode_t;
 
 /*! 
-* @brief Adma error state 
-*
-* This state is corresponding to SDHC_ADMA_STATE_ERR to inidicate the ADMA's state
-* when error happened.
-*/
+ * @brief Adma error state 
+ *
+ * This state is corresponding to SDHC_ADMA_STATE_ERR to inidicate the ADMA's state
+ * when error happened.
+ */
 typedef enum _sdhc_adma_err_state
 {
     kSdhcAdmaErrStateOfStopDma,         /*!< Stop DMA */
@@ -337,30 +337,30 @@ typedef enum _sdhc_status {
 #define SDHC_ADMA2_LEN_ALIGN            (4U)
 
 /*!
-* @brief Defines the adma1 descriptor structure.
-*
-* ADMA1 descriptor table
-* |------------------------|---------|--------------------------|
-* | Address/page Field     |reserved |         Attribute        |
-* |------------------------|---------|--------------------------|
-* |31                    12|11      6|05  |04  |03|02 |01 |00   |
-* |------------------------|---------|----|----|--|---|---|-----|
-* | address or data length | 000000  |Act2|Act1| 0|Int|End|Valid|
-* |------------------------|---------|----|----|--|---|---|-----|
-*
-*
-* |------|------|-----------------|-------|-------------|
-* | Act2 | Act1 |     Comment     | 31-28 | 27 - 12     |
-* |------|------|-----------------|---------------------|
-* |   0  |   0  | No op           | Don't care          |
-* |------|------|-----------------|-------|-------------|
-* |   0  |   1  | Set data length |  0000 | Data Length |
-* |------|------|-----------------|-------|-------------|
-* |   1  |   0  | Transfer data   | Data address        |
-* |------|------|-----------------|---------------------|
-* |   1  |   1  | Link descriptor | Descriptor address  |
-* |------|------|-----------------|---------------------|
-*/
+ * @brief Defines the adma1 descriptor structure.
+ *
+ * ADMA1 descriptor table
+ * |------------------------|---------|--------------------------|
+ * | Address/page Field     |reserved |         Attribute        |
+ * |------------------------|---------|--------------------------|
+ * |31                    12|11      6|05  |04  |03|02 |01 |00   |
+ * |------------------------|---------|----|----|--|---|---|-----|
+ * | address or data length | 000000  |Act2|Act1| 0|Int|End|Valid|
+ * |------------------------|---------|----|----|--|---|---|-----|
+ *
+ *
+ * |------|------|-----------------|-------|-------------|
+ * | Act2 | Act1 |     Comment     | 31-28 | 27 - 12     |
+ * |------|------|-----------------|---------------------|
+ * |   0  |   0  | No op           | Don't care          |
+ * |------|------|-----------------|-------|-------------|
+ * |   0  |   1  | Set data length |  0000 | Data Length |
+ * |------|------|-----------------|-------|-------------|
+ * |   1  |   0  | Transfer data   | Data address        |
+ * |------|------|-----------------|---------------------|
+ * |   1  |   1  | Link descriptor | Descriptor address  |
+ * |------|------|-----------------|---------------------|
+ */
 typedef uint32_t sdhc_adma1_descriptor_t;
 /* The mask for the control/status field in ADMA1 descriptor */
 #define SDHC_ADMA1_DESC_VALID_MASK           (1U << 0U)
@@ -379,29 +379,29 @@ typedef uint32_t sdhc_adma1_descriptor_t;
 #define SDHC_ADMA1_DESC_MAX_LEN_PER_ENTRY    (SDHC_ADMA1_DESC_LEN_MASK + 1)
 
 /*!
-* @brief Defines the ADMA2 descriptor structure.
-*
-* ADMA2 descriptor table
-* |----------------|---------------|-------------|--------------------------|
-* | Address Field  |     length    | reserved    |         Attribute        |
-* |----------------|---------------|-------------|--------------------------|
-* |63            32|31           16|15         06|05  |04  |03|02 |01 |00   |
-* |----------------|---------------|-------------|----|----|--|---|---|-----|
-* | 32-bit address | 16-bit length | 0000000000  |Act2|Act1| 0|Int|End|Valid|
-* |----------------|---------------|-------------|----|----|--|---|---|-----|
-*
-*
-* | Act2 | Act1 |     Comment     | Operation                                                         |
-* |------|------|-----------------|-------------------------------------------------------------------|
-* |   0  |   0  | No op           | Don't care                                                        |
-* |------|------|-----------------|-------------------------------------------------------------------|
-* |   0  |   1  | Reserved        | Read this line and go to next one                                 |
-* |------|------|-----------------|-------------------------------------------------------------------|
-* |   1  |   0  | Transfer data   | Transfer data with address and length set in this descriptor line |
-* |------|------|-----------------|-------------------------------------------------------------------|
-* |   1  |   1  | Link descriptor | Link to another descriptor                                        |
-* |------|------|-----------------|-------------------------------------------------------------------|
-*/
+ * @brief Defines the ADMA2 descriptor structure.
+ *
+ * ADMA2 descriptor table
+ * |----------------|---------------|-------------|--------------------------|
+ * | Address Field  |     length    | reserved    |         Attribute        |
+ * |----------------|---------------|-------------|--------------------------|
+ * |63            32|31           16|15         06|05  |04  |03|02 |01 |00   |
+ * |----------------|---------------|-------------|----|----|--|---|---|-----|
+ * | 32-bit address | 16-bit length | 0000000000  |Act2|Act1| 0|Int|End|Valid|
+ * |----------------|---------------|-------------|----|----|--|---|---|-----|
+ *
+ *
+ * | Act2 | Act1 |     Comment     | Operation                                                         |
+ * |------|------|-----------------|-------------------------------------------------------------------|
+ * |   0  |   0  | No op           | Don't care                                                        |
+ * |------|------|-----------------|-------------------------------------------------------------------|
+ * |   0  |   1  | Reserved        | Read this line and go to next one                                 |
+ * |------|------|-----------------|-------------------------------------------------------------------|
+ * |   1  |   0  | Transfer data   | Transfer data with address and length set in this descriptor line |
+ * |------|------|-----------------|-------------------------------------------------------------------|
+ * |   1  |   1  | Link descriptor | Link to another descriptor                                        |
+ * |------|------|-----------------|-------------------------------------------------------------------|
+ */
 typedef struct SdhcAdma2Descriptor {
     uint32_t attribute; /*!< The control and status field */
     uint32_t *address;  /*!< The address field */
@@ -510,13 +510,13 @@ typedef struct SdhcBootParam
 /* When internal DMA is not active, the external DMA request will be sent out */
 #define SDHC_ENABLE_EXTERNAL_DMA_REQ                (1U << 5U)
 /*! 
-* @brief Data structure to initialize the SDHC 
-*
-* This structure contains the basic configuration need to be set by the user.
-* For other configuration items to SDHC which is not contained by this structure,
-* endian mode is set by using SDHC_USING_BIG_ENDIAN, write/read watermark 
-* level is set to default 0x80 in the init function.
-*/
+ * @brief Data structure to initialize the SDHC 
+ *
+ * This structure contains the basic configuration need to be set by the user.
+ * For other configuration items to SDHC which is not contained by this structure,
+ * endian mode is set by using SDHC_USING_BIG_ENDIAN, write/read watermark 
+ * level is set to default 0x80 in the init function.
+ */
 typedef struct SdhcConfig
 {
     sdhc_dma_mode_t dmaMode;          /*!< Sets the DMA mode. */
@@ -540,93 +540,95 @@ extern "C" {
 
 /************************SDHC init/reset functions****************************/
 /*!
-* @brief SDHC module intialization function.
-* 
-* Configures the SDHC according to the user input information.
-*
-* @param base SDHC base address
-* @param initConfig configuration information
-*/
+ * @brief SDHC module intialization function.
+ * 
+ * Configures the SDHC according to the user input information.
+ *
+ * @param base SDHC base address
+ * @param initConfig configuration information
+ */
 void SDHC_Init(SDHC_Type * base, const sdhc_config_t* initConfig);
 
 /*!
-* @brief Resets the SDHC module.
-*
-* Resets the hardware register to the default state.
-*
-* @param base SDHC base address
-*/
+ * @brief Resets the SDHC module.
+ *
+ * Resets the hardware register to the default state.
+ *
+ * @param base SDHC base address
+ */
 void SDHC_Reset(SDHC_Type * base);
 
 
 /**********SDHC get static attribute(will not change dynamically) functions***************/
 /*!
-* @brief Get the capability information of SDHC
-*
-* @param base SDHC base address
-* @attribute the structure to save the capability information of SDHC
-*/
+ * @brief Get the capability information of SDHC
+ *
+ * @param base SDHC base address
+ * @attribute the structure to save the capability information of SDHC
+ */
 void SDHC_GetCapability(SDHC_Type * base, sdhc_capability_t* capability);
 
 
 /********************SDHC dynamical setting/getting related functions*********************/
 /***************Circuit/bus environment setting related functions******************/
 /*!
-* @brief Resets the specific part circuit.
-*
-* @param base SDHC base address
-* @param type the type of reset(SDHC_RST_TYPE_ALL, SDHC_RST_TYPE_CMD or SDHC_RST_TYPE_DATA)
-* @param timeout timeout for reset
-* @return 0 on success, else on error
-*/
+ * @brief Resets the specific part circuit.
+ *
+ * @param base SDHC base address
+ * @param type the type of reset(SDHC_RST_TYPE_ALL, SDHC_RST_TYPE_CMD or SDHC_RST_TYPE_DATA)
+ * @param timeout timeout for reset
+ * @return 0 on success, else on error
+ */
 uint32_t SDHC_ResetSpecificBlock(SDHC_Type * base, uint32_t resetType, 
                            uint32_t timeout);
 
 /*!
-* @brief Sets SDHC SD protol unit clock.
-*
-* @param base SDHC base address
-* @param sdClkConfig SDHC SD protol unit clock configuration
-*/
+ * @brief Sets the clock frequence of SD_CLK pin.
+ *
+ * This function defines working clock of the bus between sdhc and sdcard.   
+ *
+ * @param base SDHC base address
+ * @param sdClkConfig SDHC SD protol unit clock configuration
+ */
 void SDHC_SetSdClock(SDHC_Type * base, const sdhc_sd_clk_config_t* sdClkConfig);
 
 /*!
-* @brief Sends 80 clocks to the card to set it to be active state.
-*
-* When either of the PRSSTAT[CIHB] and PRSSTAT[CDIHB] bits are set, writing 1
-* to this bit is ignored, that is, when command line or data lines are active, 
-* write to this bit is not allowed. On the otherhand, when this bit is set, that is, 
-* during intialization active period, it is allowed to issue command, and the 
-* command bit stream will appear on the CMD pad after all 80 clock cycles are done. 
-* So when this command ends, the driver can make sure the 80 clock cycles are sent out. 
-* This is very useful when the driver needs send 80 cycles to the card and does
-* not want to wait till this bit is self-cleared.
-*
-* @param base SDHC base address
-* @param timeout timeout to initialize card
-* @return 0 on success, else on error
-*/
+ * @brief Sends 80 clocks to the card to set it to be active state.
+ *
+ * When either of the PRSSTAT[CIHB] and PRSSTAT[CDIHB] bits are set, writing 1
+ * to this bit is ignored, that is, when command line or data lines are active, 
+ * write to this bit is not allowed. On the otherhand, when this bit is set, that is, 
+ * during intialization active period, it is allowed to issue command, and the 
+ * command bit stream will appear on the CMD pad after all 80 clock cycles are done. 
+ * So when this command ends, the driver can make sure the 80 clock cycles are sent out. 
+ * This is very useful when the driver needs send 80 cycles to the card and does
+ * not want to wait till this bit is self-cleared.
+ *
+ * @param base SDHC base address
+ * @param timeout timeout to initialize card
+ * @return 0 on success, else on error
+ */
 uint32_t SDHC_SetCardActive(SDHC_Type * base, uint32_t timeout);
 
 
 /***************Transfer parameter setting related functions******************/
 /*!
-* @brief Sets the data transfer width.
-*
-* @param base SDHC base address
-* @param dtw data transfer width
-*/
+ * @brief Sets the data transfer width.
+ *
+ * @param base SDHC base address
+ * @param dtw data transfer width
+ */
 static inline void SDHC_SetDataTransferWidth(SDHC_Type * base, sdhc_dtw_t dtw)
 {
     SDHC_BWR_PROCTL_DTW(base, dtw);
 }
 
 /*!
-* @brief Sets the ADMA address.
-*
-* @param base SDHC base address
-* @param address the address for ADMA transfer
-*/
+ * @brief Sets the ADMA address.
+ *
+ * @param base SDHC base address
+ * @param address the address for ADMA transfer
+ */
 static inline void SDHC_SetAdmaAddress(SDHC_Type * base, uint32_t address)
 {
     /* When use ADMA, disable simple DMA*/
@@ -635,22 +637,22 @@ static inline void SDHC_SetAdmaAddress(SDHC_Type * base, uint32_t address)
 }
 
 /*!
-* @brief Sets the enablement command for SDIO card.
-*
-* Enables or disables corresponding command for SDIO card. These command is used 
-* dynamically by the user for each transaction. 
-*
-* @param base SDHC base address
-* @param command the enablement command.
-* @param enable enable or disable the corresponding command.
-*/
+ * @brief Sets the enablement command for SDIO card.
+ *
+ * Enables or disables corresponding command for SDIO card. These command is used 
+ * dynamically by the user for each transaction. 
+ *
+ * @param base SDHC base address
+ * @param command the enablement command.
+ * @param enable enable or disable the corresponding command.
+ */
 void SDHC_SetSdioEnableCmd(SDHC_Type * base, sdhc_sdio_enable_cmd_t command, bool enable);
 
 /*!
-* @brief Restarts a transaction which has stopped at the block gap for SDIO card.
-*
-* @param base SDHC base address
-*/
+ * @brief Restarts a transaction which has stopped at the block gap for SDIO card.
+ *
+ * @param base SDHC base address
+ */
 static inline void SDHC_SetContinueRequest(SDHC_Type * base)
 {
     SDHC_BWR_PROCTL_CREQ(base, 1);
@@ -659,47 +661,47 @@ static inline void SDHC_SetContinueRequest(SDHC_Type * base)
 
 /********************Transfer related functions*********************/
 /*!
-* @brief Sets command to be sent.
-*
-* This function fills command related argument/transfer type/data block register content.
-*
-* @param base SDHC base address
-* @param cmdReq command request structure
-*/
+ * @brief Sets command to be sent.
+ *
+ * This function fills command related argument/transfer type/data block register content.
+ *
+ * @param base SDHC base address
+ * @param cmdReq command request structure
+ */
 void SDHC_SetCommand(SDHC_Type * base, const sdhc_cmd_config_t* cmdReq);
 
 /*!
-* @brief Gets the command response.
-*
-* @param base SDHC base address
-* @param index the index of response register, range from 0 to 3
-* @return response register content
-*/
+ * @brief Gets the command response.
+ *
+ * @param base SDHC base address
+ * @param index the index of response register, range from 0 to 3
+ * @return response register content
+ */
 uint32_t SDHC_GetResponse(SDHC_Type * base, uint32_t index);
 
 /*!
-* @brief Fills the the data port.
-*
-* This function manily used to implement the data transfer by data port
-* instead of DMA.
-*
-* @param base SDHC base address
-* @param data the data about to be sent
-*/
+ * @brief Fills the the data port.
+ *
+ * This function manily used to implement the data transfer by data port
+ * instead of DMA.
+ *
+ * @param base SDHC base address
+ * @param data the data about to be sent
+ */
 static inline void SDHC_SetData(SDHC_Type * base, uint32_t data)
 {
     SDHC_WR_DATPORT(base, data);
 }
 
 /*!
-* @brief Retrieves the data from the data port.
-*
-* This function manily used to implement the data transfer by data port
-* instead of DMA.
-*
-* @param base SDHC base address
-* @return the data has been read
-*/
+ * @brief Retrieves the data from the data port.
+ *
+ * This function manily used to implement the data transfer by data port
+ * instead of DMA.
+ *
+ * @param base SDHC base address
+ * @return the data has been read
+ */
 static inline uint32_t SDHC_GetData(SDHC_Type * base)
 {
     return SDHC_RD_DATPORT(base);
@@ -707,113 +709,113 @@ static inline uint32_t SDHC_GetData(SDHC_Type * base)
 
 /***************interrupt flag/status setting/getting related functions*****************/
 /*!
-* @brief Gets present sdhc's state.
-*
-* Gets present sdhc's state which is the logic or of some bits mask defined 
-* from SDHC_CMD_INHIBIT to SDHC_DATA7_LINE_LEVEL.
-*
-* @param base SDHC base address
-* @return present sdhc's state
-*/
+ * @brief Gets present sdhc's state.
+ *
+ * Gets present sdhc's state which is the logic or of some bits mask defined 
+ * from SDHC_CMD_INHIBIT to SDHC_DATA7_LINE_LEVEL.
+ *
+ * @param base SDHC base address
+ * @return present sdhc's state
+ */
 static inline uint32_t SDHC_GetPresentState(SDHC_Type * base)
 {
     return SDHC_RD_PRSSTAT(base);
 }
 
 /*!
-* @brief Enables the specified interrupts.
-*
-* The corresponding status register bit will generate an interrupt when the 
-* corresponding interrupt signal enable bit is set. This function can set multiple
-* interrupt enable bits by using the bit mask defined from SDHC_CMD_COMPLETE_INT 
-* to SDHC_DMA_ERR_INT.
-*
-* @param base SDHC base address
-* @param enable enable or disable
-* @param intMask the mask to specify interrupts to be enable
-*/
+ * @brief Enables the specified interrupts.
+ *
+ * The corresponding status register bit will generate an interrupt when the 
+ * corresponding interrupt signal enable bit is set. This function can set multiple
+ * interrupt enable bits by using the bit mask defined from SDHC_CMD_COMPLETE_INT 
+ * to SDHC_DMA_ERR_INT.
+ *
+ * @param base SDHC base address
+ * @param enable enable or disable
+ * @param intMask the mask to specify interrupts to be enable
+ */
 void SDHC_SetIntSignal(SDHC_Type * base, bool enable, uint32_t intMask);
 
 /*!
-* @brief Enables the specified interrupt state.
-*
-* Setting the interrupt status register bit to 1 will enable the corresponding 
-* interrupt status to be set by the specified event.This function can set multiple
-* interrupt state enable bits by using the bit mask defined from SDHC_CMD_COMPLETE_INT 
-* to SDHC_DMA_ERR_INT.
-*
-* @param base SDHC base address
-* @param enable enable or disable
-* @param intMask the mask to specify interrupts' state to be enabled
-*/
+ * @brief Enables the specified interrupt state.
+ *
+ * Setting the interrupt status register bit to 1 will enable the corresponding 
+ * interrupt status to be set by the specified event.This function can set multiple
+ * interrupt state enable bits by using the bit mask defined from SDHC_CMD_COMPLETE_INT 
+ * to SDHC_DMA_ERR_INT.
+ *
+ * @param base SDHC base address
+ * @param enable enable or disable
+ * @param intMask the mask to specify interrupts' state to be enabled
+ */
 void SDHC_SetIntState(SDHC_Type * base, bool enable, uint32_t intMask);
 
 /*! 
-* @brief Gets the current interrupt status.
-*
-* Gets current interrupt status which is the logic or of some bits mask 
-* defined from SDHC_CMD_COMPLETE_INT to SDHC_DMA_ERR_INT.
-*
-* @param base SDHC base address
-* @return current interrupt flags
-*/
+ * @brief Gets the current interrupt status.
+ *
+ * Gets current interrupt status which is the logic or of some bits mask 
+ * defined from SDHC_CMD_COMPLETE_INT to SDHC_DMA_ERR_INT.
+ *
+ * @param base SDHC base address
+ * @return current interrupt flags
+ */
 static inline uint32_t SDHC_GetIntFlags(SDHC_Type * base)
 {
     return SDHC_RD_IRQSTAT(base);
 }
 
 /*!
-* @brief Clears a specified interrupt status.
-* 
-* Clears specific interrupt according to the mask which is the logic or of 
-* some bits mask defined from SDHC_CMD_COMPLETE_INT to SDHC_DMA_ERR_INT.
-*
-* @param base SDHC base address
-* @param intMask the mask to specify interrupts' flags to be cleared
-*/
+ * @brief Clears a specified interrupt status.
+ * 
+ * Clears specific interrupt according to the mask which is the logic or of 
+ * some bits mask defined from SDHC_CMD_COMPLETE_INT to SDHC_DMA_ERR_INT.
+ *
+ * @param base SDHC base address
+ * @param intMask the mask to specify interrupts' flags to be cleared
+ */
 static inline void SDHC_ClearIntFlags(SDHC_Type * base, uint32_t intMask)
 {
     SDHC_WR_IRQSTAT(base, intMask);
 }
 
 /*!
-* @brief Gets the status of auto CMD12 error.
-*
-* Gets the auto CMD12 error status which is the logic or of some bits 
-* mask defined from SDHC_ACMD12_NOT_EXEC_ERR to SDHC_ACMD12_NOT_ISSUE_ERR.
-*
-* @param base SDHC base address
-* @return auto CMD12 error status
-*/
+ * @brief Gets the status of auto CMD12 error.
+ *
+ * Gets the auto CMD12 error status which is the logic or of some bits 
+ * mask defined from SDHC_ACMD12_NOT_EXEC_ERR to SDHC_ACMD12_NOT_ISSUE_ERR.
+ *
+ * @param base SDHC base address
+ * @return auto CMD12 error status
+ */
 static inline uint32_t SDHC_GetAutoCmd12ErrStatus(SDHC_Type * base)
 {
     return SDHC_RD_AC12ERR(base);
 }
 
 /*!
-* @brief Gets the status of ADMA error.
-* 
-* Gets the ADMA error status which is the logic or of some bits mask 
-* defined from SDHC_ADMA_STATE_ERR to SDHC_ADMA_DESCRIPTOR_ERR
-*
-* @param base SDHC base address
-* @return ADMA error status
-*/
+ * @brief Gets the status of ADMA error.
+ * 
+ * Gets the ADMA error status which is the logic or of some bits mask 
+ * defined from SDHC_ADMA_STATE_ERR to SDHC_ADMA_DESCRIPTOR_ERR
+ *
+ * @param base SDHC base address
+ * @return ADMA error status
+ */
 static inline uint32_t SDHC_GetAdmaErrStatus(SDHC_Type * base)
 {
     return SDHC_RD_ADMAES(base);
 }
 
 /*!
-* @brief Sets the force events according to the given mask.
-* 
-* Sets the force events according to the mask which the logic or of some 
-* bits mask defined from SDHC_ACMD12_NOT_EXEC_ERR_EVENT to SDHC_DMA_ERROR_EVENT.
-* Then corresponding bit of interrupt status register can be set.
-*
-* @param base SDHC base address
-* @param eventMask the event mask to specify the force events' flags to be set
-*/
+ * @brief Sets the force events according to the given mask.
+ * 
+ * Sets the force events according to the mask which the logic or of some 
+ * bits mask defined from SDHC_ACMD12_NOT_EXEC_ERR_EVENT to SDHC_DMA_ERROR_EVENT.
+ * Then corresponding bit of interrupt status register can be set.
+ *
+ * @param base SDHC base address
+ * @param eventMask the event mask to specify the force events' flags to be set
+ */
 static inline void SDHC_SetForceEventFlags(SDHC_Type * base, uint32_t eventMask)
 {
     SDHC_WR_FEVT(base, mask);
@@ -821,24 +823,24 @@ static inline void SDHC_SetForceEventFlags(SDHC_Type * base, uint32_t eventMask)
 
 /*************************high level transaction api**********************************/
 /*!
-* @brief Initializes the host.
-*
-* Enables clock/interrupt and configures the host.
-*
-* @param base SDHC base address
-* @param hostConfig the host configuration
-* @return kStatus_SDHC_NoError if success
-*/
+ * @brief Initializes the host.
+ *
+ * Enables clock/interrupt and configures the host.
+ *
+ * @param base SDHC base address
+ * @param hostConfig the host configuration
+ * @return kStatus_SDHC_NoError if success
+ */
 sdhc_status_t SDHC_InitHost(SDHC_Type * base, const sdhc_config_t* hostConfig);
 
 /*!
-* @brief Deinitializes the host.
-*
-* Disables the sd bus clock/host clock/interrupt etc to shoudowns the communication 
-* between the host and card.
-*
-* @param base SDHC base address
-*/ 
+ * @brief Deinitializes the host.
+ *
+ * Disables the sd bus clock/host clock/interrupt etc to shoudowns the communication 
+ * between the host and card.
+ *
+ * @param base SDHC base address
+ */ 
 sdhc_status_t SDHC_DeInitHost(SDHC_Type * base);
 
 

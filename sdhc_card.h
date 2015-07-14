@@ -39,10 +39,10 @@
 /*! @{ */
 
 /*! 
-* @brief The command response enumeration type. 
-*
-* Defines the command response enumeration type from card to host controller.
-*/
+ * @brief The command response enumeration type. 
+ *
+ * Defines the command response enumeration type from card to host controller.
+ */
 typedef enum _sdhc_host_resp_type {
     kSdhcHostRespTypeNone = 0,          /*!< Response type: none */
     kSdhcHostRespTypeR1,                /*!< Response type: R1 */
@@ -69,11 +69,11 @@ typedef enum _sdcard_status
  ******************************************************************************/
 
 /*!
-* @brief SDHC request data structure
-*
-* Defines the request data structure from sdhc to card which includes the block 
-* size/count and flags.
-*/
+ * @brief SDHC request data structure
+ *
+ * Defines the request data structure from sdhc to card which includes the block 
+ * size/count and flags.
+ */
 typedef struct SdhcHostReqData
 {
     uint32_t blockSize;                             /*!< Block size */
@@ -83,11 +83,11 @@ typedef struct SdhcHostReqData
 } sdhc_host_req_data_t;
 
 /*!
-* @brief SDHC request structure
-*
-* Defines the request from sdhc to card which includes the command index, 
-* argument, flags, response, and data.
-*/
+ * @brief SDHC request structure
+ *
+ * Defines the request from sdhc to card which includes the command index, 
+ * argument, flags, response, and data.
+ */
 typedef struct SdhcHostRequest
 {
     uint32_t cmdIndex;                              /*!< Command index */
@@ -257,25 +257,25 @@ bool SDCARD_CheckReadOnly(sdhc_card_t *card);
 void SDCARD_Shutdown(sdhc_card_t *card);
 
 /*!
-* @brief Checks whether the card is present on a specified host controller.
-*
-* This function checks if there's a card inserted in the SDHC. It is mainly 
-* used in the polling detection pin mode when DAT3 or dedicate CD pin is selected
-* as card detection pin.
-*
-* @param card the specific card
-* @return kStatus_SDCARD_NoError on success
-*/
+ * @brief Checks whether the card is present on a specified host controller.
+ *
+ * This function checks if there's a card inserted in the SDHC. It is mainly 
+ * used in the polling detection pin mode when DAT3 or dedicate CD pin is selected
+ * as card detection pin.
+ *
+ * @param card the specific card
+ * @return kStatus_SDCARD_NoError on success
+ */
 sdcard_status_t SDCARD_DetectCard(sdhc_card_t *card);
 
 
 /*!
-* @brief IRQ handler for SDHC
-*
-* This function deals with IRQs on the given host controller.
-*
-* @param host the host state inforamtion
-*/
+ * @brief IRQ handler for SDHC
+ *
+ * This function deals with IRQs on the given host controller.
+ *
+ * @param host the host state inforamtion
+ */
 void SDCARD_HostIrqHandler(sdhc_host_t* host);
 
 /*@} */
