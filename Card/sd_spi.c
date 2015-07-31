@@ -28,8 +28,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __SDHC_CARD_H__
-#define __SDHC_CARD_H__
+#ifndef __SDHC_SD_H__
+#define __SDHC_SD_H__
 
 /******************************************************************************
  * Enumerations.
@@ -43,7 +43,7 @@
  *
  * Defines the command response enumeration type from card to host controller.
  */
-typedef enum _sdhc_host_resp_type {
+typedef enum _sd_card_resp_type {
     kSdhcHostRespTypeNone = 0,          /*!< Response type: none */
     kSdhcHostRespTypeR1,                /*!< Response type: R1 */
     kSdhcHostRespTypeR1b,               /*!< Response type: R1b */
