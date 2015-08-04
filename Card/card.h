@@ -30,7 +30,6 @@
 #ifndef __CARD_H__
 #define __CARD_H__
 
-#include "fsl_os_abstraction.h"
 #include "spec.h"
 #include "sdhc.h"
 
@@ -38,12 +37,18 @@
  * Definitions
  ******************************************************************************/
 
+/*!
+ * @addtogroup CARD TYPE
+ * @{
+ */
+
 /*! 
  * @brief The command response type. 
  *
  * Defines the command response type from card to host controller.
  */
-typedef enum _sdmmc_resp_type {
+typedef enum _sdmmc_resp_type 
+{
     kSdmmcRespTypeNone = 0U,         /*!< Response type: none */
     kSdmmcRespTypeR1   = 1U,         /*!< Response type: R1 */
     kSdmmcRespTypeR1b  = 2U,         /*!< Response type: R1b */
@@ -57,8 +62,8 @@ typedef enum _sdmmc_resp_type {
 } sdmmc_resp_type_t;
 
 /*! @brief Defines the SD/MMC card API's running status. */
-typedef enum _sdmmc_status{    
-    /* Common error status */
+typedef enum _sdmmc_status
+{   
     kStatus_SDMMC_NoError                   = 0U,/*!< Success */
     kStatus_SDMMC_Failed                    = 1U,/*!< Failed */  
     kStatus_SDMMC_TimeoutError              = 2U,/*!< Timeout */  
@@ -88,18 +93,25 @@ typedef enum _sdmmc_status{
     kStatus_SDMMC_EraseCmdFailed            = 26U,/*!< Erase command failed */
     kStatus_SDMMC_SwitchFunctionCmdFailed   = 27U,/*!< SwitchFunction command failed */ 
     kStatus_SDMMC_StopTransmissionCmdFailed = 28U,/*!< StopTransmission command failed */
-    kStatus_SDMMC_SendStatusCmdFailed       = 29U /*!< SendStatus command failed */
+    kStatus_SDMMC_SendStatusCmdFailed       = 29U,/*!< SendStatus command failed */
+    kStatus_SDMMC_CreateEventFailed         = 30U,/*!< Create event failed */
+    kStatus_SDMMC_WaitEventFailed           = 31U,/*!< Wait event failed */
+    kStatus_SDMMC_NotifyEventFailed         = 32U,/*!< Notify event failed */
+    kStatus_SDMMC_GetCurrentTimeFaild       = 33U /*!< Get current time failed */
 } sdmmc_status_t;
 
 /*! @brief Defines host's transfer mode */
-typedef enum _sdmmc_host_transfer_mode {
+typedef enum _sdmmc_host_transfer_mode 
+{
     kSdmmcHostTransModePio   = 1U,   /*!< Polling Data Port */
     kSdmmcHostTransModeSdma  = 2U,   /*!< Simple DMA */
     kSdmmcHostTransModeAdma1 = 3U,   /*!< ADMA1 */
     kSdmmcHostTransModeAdma2 = 4U,   /*!< ADMA2 */
 } sdmmc_host_transfer_mode_t;
 
-typedef enum _sdmmc_host_card_detect {
+/*! @brief Defines host's card detection way */
+typedef enum _sdmmc_host_card_detect 
+{
     kSdmmcHostCardDetectGpio     = 1U,/*!< Use GPIO for card detection. */
     kSdmmcHostCardDetectDat3     = 2U,/*!< Use DAT3 for card detection. */
     kSdmmcHostCardDetectCdPin    = 3U,/*!< Use dedicate CD pin for card detection */
@@ -107,26 +119,10 @@ typedef enum _sdmmc_host_card_detect {
     kSdmmcHostCardDetectPollCd   = 5U,/*!< Poll dedicate CD pin for card detection. */
 } sdmmc_host_card_detect_t;
 
-/*
-typedef enum _sdmmc_card_type{
-    kSdmmcCardTypeUnknown = 1,          
-    kSdmmcCardTypeSd,                    
-    kSdmmcCardTypeMmc,                  
-    kSdmmcCardTypeSdio,                  
-    kSdmmcCardTypeCeAta,                 
-} sdmmc_card_type_t;
-
-#define IS_SD_CARD(x)                       ((x)->cardType == kCardTypeSd)
-#define IS_MMC_CARD(x)                      ((x)->cardType == kCardTypeMmc)
-#define IS_SDIO_CARD(x)                     ((x)->cardType == kCardTypeSdio)
-#define IS_CE_ATA_CARD(x)                   ((x)->cardType == kCardTypeCeAta) */
-
-
 /*!
  * @brief Card data structure
  *
- * Defines this structure to contain data related attribute, flag
- * and error status.
+ * Defines this structure to contain data related attribute, flag and error status.
  */
 typedef struct CardData
 {
@@ -143,7 +139,6 @@ typedef struct CardData
 #define CARD_DATA_ERR_DATA_END_BIT     (1U << 2U)/*!< Data end bit error */
 #define CARD_DATA_ERR_DMA              (1U << 3U)/*!< DMA error */
 #define CARD_DATA_ERR_AUTO_CMD12       (1U << 4U)/*!< Auto CMD12 error */
-    semaphore_t *complete; /*!< Data transfer completion semaphore */
 } card_data_t;
 
 /*!
@@ -168,16 +163,16 @@ typedef struct CardCmd
 #define CARD_CMD_ERR_CARD_REMOVED     (1U << 6U) /*!< Card removed */
 #define CARD_CMD_ERR_RSPBUSY_TIMEOUT  (1U << 7U) /*!< Response busy timeout error */
     uint32_t response[4];             /*!< Response for this command */
-    semaphore_t *complete;   /*!< Command completion semaphore */
 } card_cmd_t;
 
+/* Host capability */
 #define host_capability_t sdhc_capability_t
 
-/*! @brief State structure to save host information and callback */
+/*! @brief Host information and callback */
 typedef struct Host
 {
     /* Data */
-    uint32_t instance;                   /*!< Host instance id */
+    uint32_t instance;                       /*!< Host instance id */
     sdmmc_host_card_detect_t cardDetectMode; /*!< Card detection mode */
     sdmmc_host_transfer_mode_t transferMode; /*!< Data transfer mode */
     host_capability_t * capability;          /*!< Capability information */
@@ -185,30 +180,42 @@ typedef struct Host
 #define HOST_FLAGS_CARD_PRESENTED    (1U << 0U) /* Detected card is inserted */
     card_cmd_t *currentCmd;                  /*!< Command is sending */
     card_data_t *currentData;                /*!< Data is transferring */
-    uint32_t * admaTableAddress;             /*!< ADMA table address */
-#if defined FSL_CARD_DRIVER_USING_DYNALLOC
-    uint32_t admaTableMaxEntries;            /*!< Maximum entries can be held in table */
-#endif
+    uint32_t *admaTableAddress;              /*!< ADMA table address */
+    uint32_t admaTableMaxEntries;            /*!< Items count in ADMA table */
 
     /* Callback */
-    void (*cardIntCallback)(uint32_t hostInstance);                  /*!< Callback function for card interrupt occurs */
-    void (*cardDetectCallback)(uint32_t hostInstance, bool inserted);/*!< Callback function for card detect occurs */
-    void (*blockGapCallback)(uint32_t hostInstance);                 /*!< Callback function for block gap occurs */
+    bool (*createCmdEvent)();                /*!< Create command event */
+    bool (*waitCmdEvent)(uint32_t timeout);  /*!< Wait command event */
+    bool (*notifyCmdEvent)();                /*!< Notify command event */
+    bool (*deleteCmdEvent)();                /*!< Delete command event */
+    bool (*createDataEvent)();               /*!< Create data event */
+    bool (*waitDataEvent)(uint32_t timeout); /*!< Wait data event */
+    bool (*notifyDataEvent)();               /*!< Notify data event */ 
+    bool (*deleteDataEvent)();               /*!< Delete data event */
+    void (*markStartTimeMsec)();             /*!< Mark start to count milisecond */
+    uint32_t (*getElapsedTimeMsec)();        /*!< Get miliseconds elapsed */
+    void (*delayTimeMsec)();                 /*!< Delay milisecond */
+    void (*cardIntCallback)(uint32_t hostInstance); /*!< Card interrupt occurs */
+    void (*cardDetectCallback)(uint32_t hostInstance, bool inserted);/*!< Card detect occurs */
+    void (*blockGapCallback)(uint32_t hostInstance);/*!< Block gap occurs */
 } host_t;
 
-/* Defines if host endian mode */
+/* Defines host endian mode */
 //#define FSL_HOST_USING_BIG_ENDIAN 
+/* Defines if card driver support ADMA1 related operation. */
+//#define FSL_CARD_DRIVER_ENABLE_ADMA1
 
 /* Check if host support switching the card to high speed mode */
 #define DOES_HOST_SUPPORT_HIGHSPEED(x)      (x->capability->supportMask & SDHC_SUPPORT_HIGHSPEED)
 /* eSDHC on all kinetis boards will support 4 bit data bus. */
 #define DOES_HOST_SUPPORT_4BITS(x)          true
-/* Use IRQ mode to send command and transfer data */
+/* Defines if use IRQ mode to send command and transfer data */
 #define FSL_CARD_DRIVER_USING_IRQ
 /* Enable auto CMD12 in host */
-//#define FSL_CARD_DIVER_ENABLE_HOST_AUTOCMD12
-/* Use dynamical allocation mode to save memory */
-//#define FSL_CARD_DRIVER_USING_DYNALLOC
+//#define FSL_CARD_DRIVER_ENABLE_HOST_AUTOCMD12
+
+/* Continuously wait till the event be nodified */
+#define FSL_HOST_WAIT_FOREVER               (1U << 32U - 1U)
 
 /*!
  * @brief SD Card Structure
@@ -223,13 +230,13 @@ typedef struct Sd
     uint32_t version;            /*!< Card version */
     uint32_t caps;               /*!< Capability */
 #define SD_CARD_CAPS_HIGHCAPACITY    (1U << 1U)/*!< Card is high capacity */
-#define SD_CARD_CAPS_BUSWIDTH_4BITS  (1U << 2U)/*!< 4-bit data width support bit */
+#define SD_CARD_CAPS_BUSWIDTH_4BITS  (1U << 2U)/*!< Support 4-bit data width */
 #define SD_CARD_CAPS_SDHC            (1U << 3U)/*!< Card is SDHC */
 #define SD_CARD_CAPS_SDXC            (1U << 4U)/*!< Card is SDXC */
-    uint32_t rawCid[4];          /*!< CID */
-    uint32_t rawCsd[4];          /*!< CSD */
-    uint32_t rawScr[2];          /*!< CSD */
-    uint32_t ocr;                /*!< OCR */
+    uint32_t rawCid[4];          /*!< Raw CID content */
+    uint32_t rawCsd[4];          /*!< Raw CSD content */
+    uint32_t rawScr[2];          /*!< Raw CSD content */
+    uint32_t ocr;                /*!< Raw OCR content */
     sd_cid_t cid;                /*!< CID */
     sd_csd_t csd;                /*!< CSD */
     sd_scr_t scr;                /*!< SCR */
@@ -248,6 +255,9 @@ typedef struct Sd
 /* Card command maximum timeout value */     
 #define FSL_CARD_COMMAND_TIMEOUT            (1000U)
 
+/*! @name CARD  FUNCTION */
+/*@{ */
+
 /*************************************************************************************************
  * API
  ************************************************************************************************/
@@ -256,7 +266,7 @@ typedef struct Sd
 extern "C" {
 #endif
 
-/*! @name SDHC CARD DRIVER FUNCTION */
+/*! @name CARD DRIVER FUNCTION */
 /*@{ */
 
 /*!
@@ -264,8 +274,8 @@ extern "C" {
  *
  * This function initializes the card on a specific SDHC.
  *
- * @param host the pointer to the host struct, it is allocated by user
- * @param card the place to store card related information
+ * @param host The pointer to store the host inforamtion.
+ * @param card The pointer to store card related information.
  * @return kStatus_SD_NoError on success
  */
 sdmmc_status_t SD_IndentifyCard(host_t *host, sd_t *card);
@@ -276,13 +286,14 @@ sdmmc_status_t SD_IndentifyCard(host_t *host, sd_t *card);
  * This function reads blocks from specific card, with default
  * block size defined by SDHC_CARD_DEFAULT_BLOCK_SIZE.
  *
- * @param card the handle of the card
- * @param buffer the buffer to hold the data read from card
- * @param startBlock the start block index
- * @param blockCount the number of blocks to read
+ * @param card The handle of the card
+ * @param buffer The buffer to hold the data read from card
+ * @param startBlock The start block index
+ * @param blockCount The number of blocks to read
  * @return kStatus_SD_NoError on success
  */
-sdmmc_status_t SD_ReadBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock, uint32_t blockCount);
+sdmmc_status_t SD_ReadBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock, 
+                    uint32_t blockCount);
 
 /*!
  * @brief Writes blocks of data to the specific card.
@@ -290,23 +301,24 @@ sdmmc_status_t SD_ReadBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock, u
  * This function writes blocks to specific card, with default block size defined 
  * by SDHC_CARD_DEFAULT_BLOCK_SIZE.
  *
- * @param card the handle of the card
- * @param buffer the buffer holding the data to be written to the card
- * @param startBlock the start block index
- * @param blockCount the number of blocks to write
+ * @param card The handle of the card
+ * @param buffer The buffer holding the data to be written to the card
+ * @param startBlock The start block index
+ * @param blockCount The number of blocks to write
  * @return kStatus_SD_NoError on success
  */
-sdmmc_status_t SD_WriteBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock, uint32_t blockCount);
+sdmmc_status_t SD_WriteBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock, 
+                      uint32_t blockCount);
 
 /*!
  * @brief Erases blocks of the specific card.
  *
- * This function erases blocks of a specific card, with default
- * block size defined by the SDHC_CARD_DEFAULT_BLOCK_SIZE.
+ * This function erases blocks of a specific card, with default block size 
+ * defined by the SDHC_CARD_DEFAULT_BLOCK_SIZE.
  *
- * @param card the handle of the card
- * @param startBlock the start block index
- * @param blockCount the number of blocks to erase
+ * @param card The handle of the card
+ * @param startBlock The start block index
+ * @param blockCount The number of blocks to erase
  * @return kStatus_SD_NoError on success
  */
 sdmmc_status_t SD_EraseBlocks(sd_t *card, uint32_t startBlock, uint32_t blockCount);
@@ -316,7 +328,7 @@ sdmmc_status_t SD_EraseBlocks(sd_t *card, uint32_t startBlock, uint32_t blockCou
  *
  * This function checks if the card is write-protected via CSD register.
  *
- * @param card the specific card
+ * @param card The specific card
  * @return kStatus_SD_NoError on success
  */
 bool SD_CheckReadOnly(sd_t *card);
@@ -326,7 +338,7 @@ bool SD_CheckReadOnly(sd_t *card);
  *
  * This function deinitializes the specific card.
  *
- * @param card the specific card
+ * @param card The specific card
  */
 void SD_Shutdown(sd_t *card);
 
@@ -337,7 +349,7 @@ void SD_Shutdown(sd_t *card);
  * used in the polling detection pin mode when DAT3 or dedicate CD pin is selected
  * as card detection pin.
  *
- * @param card the specific card
+ * @param card The specific card
  * @return kStatus_SD_NoError on success
  */
 sdmmc_status_t SD_DetectCard(sd_t *card);
@@ -352,32 +364,75 @@ sdmmc_status_t SD_DetectCard(sd_t *card);
  */
 void SDMMC_IrqHandler(host_t* host);
 
-
-/* Some internal API used in card command source file sd.c/mmc.c */
-void SDMMC_DelayMsec(uint32_t msec);
-
- /*!
-* @brief Issues the request on a specific host controller and returns immediately.
-*
-* This function sents the command to the card on a specific host.
-* The command is sent and host will not wait the command response from the card.
-* Command response and read/write data operation will be done in ISR instead of
-* in this function.
-*
-* @param base SDHC base address
-* @param host the host state inforamtion
-* @return kStatus_SDHC_NoError on success
-*/
-//sdmmc_status_t SDMMC_IssueRequestBlocking(host_t* host, uint32_t timeoutInMs);
-
+/*!
+ * @brief Sends a command using block way.
+ *
+ * This function will wait until the command response is got.
+ *
+ * @param host The host information.
+ * @param timeoutInMs The timeout time in miliseconds.
+ * @return kStatus_SDMMC_NoError if no error.
+ */
 sdmmc_status_t SDMMC_SendCmdBlocking(host_t *host, uint32_t timeoutInMs);
+
+/*!
+ * @brief Checks the card status in the R1 reponse.
+ *
+ * This function checks the card status to estimate if sending command success.
+ *
+ * @param cardCmd The card command inforamtion.
+ * @return kStatus_SDMMC_NoError if no error.
+ */
 sdmmc_status_t SDMMC_CheckR1Response(card_cmd_t *cardCmd);
+
+/*!
+ * @brief Waits until the data transfer complete.
+ *
+ * @param host The host information.
+ * @param timeoutInMs The timeout time in miliseconds.
+ * @return kStatus_SDMMC_NoError if no error.
+ */
 sdmmc_status_t SDMMC_WaitDataTransferComplete(host_t *host, uint32_t timeoutInMs);
+
+/*!
+ * @brief Detects if the card is inserted.
+ *
+ * @param host The host information.
+ * @return kStatus_SDMMC_NoError if no error.
+ */
 sdmmc_status_t SDMMC_DetectCard(host_t *host);
-sdmmc_status_t SDMMC_AllocStaticMemory(host_t * host);
-sdmmc_status_t SDMMC_ConfigClock(host_t *host, uint32_t destClock);
+
+/*!
+ * @brief Configures the SD bus clock frequence.
+ *
+ * @param host The host information.
+ * @param Clock The target SD bus clock frequence. 
+ * @return kStatus_SDMMC_NoError if no error.
+ */
+sdmmc_status_t SDMMC_ConfigClock(host_t *host, uint32_t targetClock);
+
+/*!
+ * @brief Initializes the host controller.
+ *
+ * @param host The host information.
+ * @return kStatus_SDMMC_NoError if no error.
+ */
 sdmmc_status_t SDMMC_InitHost(host_t *host);
+
+/*!
+ * @brief Deinitializes the host controller.
+ * 
+ * @param host The host information.
+ * @return kStatus_SDMMC_NoError if no error.
+ */
 sdmmc_status_t SDMMC_DeInitHost(host_t *host);
+
+/*!
+ * @brief Sets the bus width of the host controller.
+ *
+ * @param host The host information.
+ * @param busWidth The data bus width.
+ */
 sdmmc_status_t SDMMC_SetHostBusWidth(host_t *host, sdhc_dtw_t busWidth);
 /*@} */
 #if defined(__cplusplus)

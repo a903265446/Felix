@@ -37,22 +37,21 @@
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SDHC_InitMmcBoot
- * Description: Initializes boot configuration for MMC card.
- *
- *END*********************************************************************/
-
-/*FUNCTION****************************************************************
- *
  * Function Name: SDHC_Init
  * Description: Initializes SDHC according to the configuration structure.
  *
  *END*********************************************************************/
-void SDHC_Init(SDHC_Type * base, const sdhc_config_t* configPtr)
+void SDHC_Init(SDHC_Type *base, const sdhc_config_t *configPtr, 
+       sdhc_capability_t *capabilityPtr)
 {
     assert(configPtr);
+    assert(capabilityPtr);
     
     uint32_t proctl, wml;
+    uint32_t htCapability, hostVer;
+    uint8_t maxBlockLength;
+    assert(configPtr);
+    assert(capabilityPtr);
 
     proctl  = SDHC_RD_PROCTL(base);
     if (configPtr->dat3AsCardDetectPinEnable)
@@ -71,6 +70,41 @@ void SDHC_Init(SDHC_Type * base, const sdhc_config_t* configPtr)
     wml |= SDHC_WML_RDWML(configPtr->readWatermarkLevel);
     wml |= SDHC_WML_WRWML(configPtr->writeWatermarkLevel);
     SDHC_WR_WML(base, wml);
+    
+    hostVer = SDHC_RD_HOSTVER(base);
+    capabilityPtr->specVersion = ((hostVer & SDHC_HOSTVER_SVN_MASK) >> SDHC_HOSTVER_SVN_SHIFT);
+    capabilityPtr->vendorVersion = ((hostVer & SDHC_HOSTVER_VVN_MASK) >> SDHC_HOSTVER_VVN_SHIFT);
+    
+    htCapability = SDHC_RD_HTCAPBLT(base);
+    maxBlockLength = ((htCapability & SDHC_HTCAPBLT_MBL_MASK) >> SDHC_HTCAPBLT_MBL_SHIFT);
+    switch (maxBlockLength)
+    {
+        case 0:
+            capabilityPtr->maxBlockLength = 512U;
+            break;
+        case 1:
+            capabilityPtr->maxBlockLength = 1024U;
+            break;
+        case 2:
+            capabilityPtr->maxBlockLength = 2048U;
+            break;
+        case 3:
+            capabilityPtr->maxBlockLength = 4096U;
+            break;
+        default: 
+            break;
+    }
+    capabilityPtr->supportMask = (htCapability & (SDHC_SUPPORT_ADMA
+                                                | SDHC_SUPPORT_HIGHSPEED
+                                                | SDHC_SUPPORT_DMA
+                                                | SDHC_SUPPORT_SUSPEND_RESUME
+                                                | SDHC_SUPPORT_V330));
+#if FSL_FEATURE_SDHC_HAS_V300_SUPPORT
+    capabilityPtr->supportMask |= (htCapability & SDHC_SUPPORT_V300);
+#endif
+#if FSL_FEATURE_SDHC_HAS_V180_SUPPORT
+    capabilityPtr->supportMask |= (htCapability & SDHC_SUPPORT_V180);
+#endif 
 }
 
 /*FUNCTION****************************************************************
@@ -79,7 +113,7 @@ void SDHC_Init(SDHC_Type * base, const sdhc_config_t* configPtr)
  * Description: Perform different kinds of reset.
  *
  *END*********************************************************************/
-uint32_t SDHC_Reset(SDHC_Type * base, uint32_t resetTypeMask, uint32_t timeout)
+uint32_t SDHC_Reset(SDHC_Type *base, uint32_t resetTypeMask, uint32_t timeout)
 {
     uint32_t mask;
     assert(timeout);
@@ -100,59 +134,11 @@ uint32_t SDHC_Reset(SDHC_Type * base, uint32_t resetTypeMask, uint32_t timeout)
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SDHC_GetCapability
- * Description: Gets the capability information of SDHC.
- *
- *END*********************************************************************/
-void SDHC_GetCapability(SDHC_Type * base, sdhc_capability_t * capabilityPtr)
-{
-    uint32_t htCapability, hostVer;
-    uint8_t maxBlockLength;
-    assert(capabilityPtr);
-
-    htCapability = SDHC_RD_HTCAPBLT(base);
-    hostVer = SDHC_RD_HOSTVER(base);
-
-    capabilityPtr->specVersion = ((hostVer & SDHC_HOSTVER_SVN_MASK) >> SDHC_HOSTVER_SVN_SHIFT);
-    capabilityPtr->vendorVersion = ((hostVer & SDHC_HOSTVER_VVN_MASK) >> SDHC_HOSTVER_VVN_SHIFT);
-    maxBlockLength = ((htCapability & SDHC_HTCAPBLT_MBL_MASK) >> SDHC_HTCAPBLT_MBL_SHIFT);
-    switch (maxBlockLength)
-    {
-        case 0:
-            capabilityPtr->maxBlockLength = 512U;
-            break;
-        case 1:
-            capabilityPtr->maxBlockLength = 1024U;
-            break;
-        case 2:
-            capabilityPtr->maxBlockLength = 2048U;
-            break;
-        case 3:
-            capabilityPtr->maxBlockLength = 4096U;
-            break;
-        default: 
-            break;
-    }
-    capabilityPtr->supportMask = (htCapability & (SDHC_SUPPORT_ADMA
-                                               | SDHC_SUPPORT_HIGHSPEED
-                                               | SDHC_SUPPORT_DMA
-                                               | SDHC_SUPPORT_SUSPEND_RESUME
-                                               | SDHC_SUPPORT_V330));
-#if FSL_FEATURE_SDHC_HAS_V300_SUPPORT
-    capabilityPtr->supportMask |= (htCapability & SDHC_SUPPORT_V300);
-#endif
-#if FSL_FEATURE_SDHC_HAS_V180_SUPPORT
-    capabilityPtr->supportMask |= (htCapability & SDHC_SUPPORT_V180);
-#endif 
-}
-
-/*FUNCTION****************************************************************
- *
  * Function Name: SDHC_SetSdClock
  * Description: Sets the clock frequence of SD_CLK pin.
  *
  *END*********************************************************************/
-void SDHC_SetSdClock(SDHC_Type * base, sdhc_sd_clock_config_t* configPtr)
+void SDHC_SetSdClock(SDHC_Type *base, sdhc_sd_clock_config_t *configPtr)
 {
     uint32_t divisor, freq, sysCtlReg;
     assert(configPtr);
@@ -211,7 +197,7 @@ void SDHC_SetSdClock(SDHC_Type * base, sdhc_sd_clock_config_t* configPtr)
  * Description: Sends 80 clocks to the card to set it to be active state.
  *
  *END*********************************************************************/
-uint32_t SDHC_SetCardActive(SDHC_Type * base, uint32_t timeout)
+uint32_t SDHC_SetCardActive(SDHC_Type *base, uint32_t timeout)
 {
     assert(timeout);
     SDHC_BWR_SYSCTL_INITA(base, 1);
@@ -225,38 +211,15 @@ uint32_t SDHC_SetCardActive(SDHC_Type * base, uint32_t timeout)
     }
     return (!timeout);
 }
-uint32_t SDHC_GetAdmaEntryNumber(SDHC_Type * base, uint32_t dataLength)
-{
-    sdhc_dma_mode_t dmaMode;
-    uint32_t entries = 0;
 
-    dmaMode = (sdhc_dma_mode_t)SDHC_BRD_PROCTL_DMAS(base);
-    switch (dmaMode)
-    {
-        case kSdhcDmaAdma1:
-            /* Check data length alignment */
-            /*if (dataLength % SDHC_ADMA1_LEN_ALIGN)
-            {
-                return 0;
-            }*/
-            entries = (dataLength / SDHC_ADMA1_DESC_MAX_LEN_PER_ENTRY) + 1;
-            /* ADMA1 needs two descritors to finish a transfer */
-            entries *= 2;
-            break;
-        case kSdhcDmaAdma2:
-            /* Check data length alignment */
-            /*if (dataLength % SDHC_ADMA2_LEN_ALIGN)
-            {
-                return 0;
-            }*/
-            entries = ((dataLength / SDHC_ADMA2_DESC_MAX_LEN_PER_ENTRY) + 1);
-            break;
-        default:
-            break;
-    }
-    return entries;
-}
-void SDHC_SetAdmaTable(SDHC_Type * base, uint32_t* tableAddress, uint32_t * dataBuffer, uint32_t dataLength)
+/*FUNCTION****************************************************************
+ *
+ * Function Name: SDHC_SetAdmaTable
+ * Description: Sets each item in ADMA table and sets the ADMA table address.
+ *
+ *END*********************************************************************/
+void SDHC_SetAdmaTable(SDHC_Type *base, uint32_t *tableAddress, 
+               uint32_t * dataBuffer, uint32_t dataLength)
 {
     sdhc_dma_mode_t dmaMode;
     uint32_t * startAddress;
@@ -272,23 +235,29 @@ void SDHC_SetAdmaTable(SDHC_Type * base, uint32_t* tableAddress, uint32_t * data
             /* ADMA1 needs two descritors to finish a transfer */
             entries *= 2;
             adma1EntryAddress = (sdhc_adma1_descriptor_t *)tableAddress;
-            //adma1EntryAddress = (sdhc_adma1_descriptor_t *);
             for (i = 0; i < entries; i += 2)
             {
                 /* Each descriptor for ADMA1 is 64-bit in length */
-                if ((dataLength - sizeof(uint32_t) * (startAddress - dataBuffer)) < SDHC_ADMA1_DESC_MAX_LEN_PER_ENTRY)
+                if ((dataLength - sizeof(uint32_t) * (startAddress - dataBuffer)) 
+                    <= SDHC_ADMA1_DESC_MAX_LEN_PER_ENTRY)
                 {
                     /* The last piece of data, setting end flag in descriptor */
-                    adma1EntryAddress[i] = ((uint32_t)(dataLength - sizeof(uint32_t) * (startAddress - dataBuffer)) << SDHC_ADMA1_DESC_LEN_SHIFT);
+                    adma1EntryAddress[i] = ((uint32_t)(dataLength - sizeof(uint32_t) 
+                                         * (startAddress - dataBuffer)) 
+                                         << SDHC_ADMA1_DESC_LEN_SHIFT);
                     adma1EntryAddress[i] |= SDHC_ADMA1_DESC_TYPE_SET;
-                    adma1EntryAddress[i+1] = (uint32_t)(startAddress) << SDHC_ADMA1_DESC_ADDRESS_SHIFT;
-                    adma1EntryAddress[i+1] |= SDHC_ADMA1_DESC_TYPE_TRAN | SDHC_ADMA1_DESC_END_MASK;
+                    adma1EntryAddress[i+1] = ((uint32_t)(startAddress) 
+                                           << SDHC_ADMA1_DESC_ADDRESS_SHIFT);
+                    adma1EntryAddress[i+1] |= (SDHC_ADMA1_DESC_TYPE_TRAN 
+                                            | SDHC_ADMA1_DESC_END_MASK);
                 }
                 else
                 {
-                    adma1EntryAddress[i] = (uint32_t)SDHC_ADMA1_DESC_MAX_LEN_PER_ENTRY << SDHC_ADMA1_DESC_LEN_SHIFT;
+                    adma1EntryAddress[i] = (uint32_t)SDHC_ADMA1_DESC_MAX_LEN_PER_ENTRY 
+                                         << SDHC_ADMA1_DESC_LEN_SHIFT;
                     adma1EntryAddress[i] |= SDHC_ADMA1_DESC_TYPE_SET;
-                    adma1EntryAddress[i+1] = (uint32_t)(startAddress) << SDHC_ADMA1_DESC_ADDRESS_SHIFT;
+                    adma1EntryAddress[i+1] = (uint32_t)(startAddress) 
+                                           << SDHC_ADMA1_DESC_ADDRESS_SHIFT;
                     adma1EntryAddress[i+1] |= SDHC_ADMA1_DESC_TYPE_TRAN;
                     startAddress += SDHC_ADMA1_DESC_MAX_LEN_PER_ENTRY/sizeof(uint32_t);
                 }
@@ -296,27 +265,29 @@ void SDHC_SetAdmaTable(SDHC_Type * base, uint32_t* tableAddress, uint32_t * data
             break;
         case kSdhcDmaAdma2:
             entries = ((dataLength / SDHC_ADMA2_DESC_MAX_LEN_PER_ENTRY) + 1);
-            //adma2EntryAddress = (sdhc_adma2_descriptor_t *)SDHC_RD_ADSADDR(base);
             adma2EntryAddress = (sdhc_adma2_descriptor_t *)tableAddress;
             for (i = 0; i < entries; i++)
             {
                 /* Each descriptor for ADMA2 is 64-bit in length */
-                if ((dataLength - sizeof(uint32_t) * (startAddress - dataBuffer)) <= SDHC_ADMA2_DESC_MAX_LEN_PER_ENTRY)
+                if ((dataLength - sizeof(uint32_t) * (startAddress - dataBuffer)) 
+                    <= SDHC_ADMA2_DESC_MAX_LEN_PER_ENTRY)
                 {
                     /* The last piece of data, setting end flag in descriptor */
                     adma2EntryAddress[i].address = startAddress;
                     adma2EntryAddress[i].attribute = ((SDHC_ADMA2_DESC_LEN_MASK 
                                                    & (dataLength - sizeof(uint32_t) * (startAddress - dataBuffer))) 
                                                    << SDHC_ADMA2_DESC_LEN_SHIFT);
-                    adma2EntryAddress[i].attribute |= (SDHC_ADMA2_DESC_TYPE_TRAN | SDHC_ADMA2_DESC_END_MASK);
+                    adma2EntryAddress[i].attribute |= (SDHC_ADMA2_DESC_TYPE_TRAN 
+                                                    | SDHC_ADMA2_DESC_END_MASK);
                 }
                 else
                 {
                     adma2EntryAddress[i].address = startAddress;
-                    adma2EntryAddress[i].attribute = ((SDHC_ADMA2_DESC_LEN_MASK & SDHC_ADMA2_DESC_MAX_LEN_PER_ENTRY) << SDHC_ADMA2_DESC_LEN_SHIFT);
+                    adma2EntryAddress[i].attribute = ((SDHC_ADMA2_DESC_LEN_MASK 
+                                                   & SDHC_ADMA2_DESC_MAX_LEN_PER_ENTRY) 
+                                                   << SDHC_ADMA2_DESC_LEN_SHIFT);
                     adma2EntryAddress[i].attribute |= SDHC_ADMA2_DESC_TYPE_TRAN;
                     startAddress += SDHC_ADMA2_DESC_MAX_LEN_PER_ENTRY/sizeof(uint32_t);
-                    //adma2EntryAddress++;
                 }
             }
             break;
@@ -330,74 +301,11 @@ void SDHC_SetAdmaTable(SDHC_Type * base, uint32_t* tableAddress, uint32_t * data
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SDHC_SetEnableCmd
- * Description: Sets the enablement command for SDHC.
- *
- *END*********************************************************************/
-void SDHC_SetEnableCmd(SDHC_Type * base, sdhc_enable_cmd_t command, bool enable)
-{
-    if (enable)
-    {
-        switch (command)
-        {
-            case kSdhcSetCardDetectLevelForTest:
-				SDHC_BWR_PROCTL_CDSS(base, 1);
-				break;
-			case kSdhcSetCardDetectTestLevel:
-				SDHC_BWR_PROCTL_CDTL(base, 1);
-				break;
-            case kSdhcStopAtBlockGapEnable:
-                SDHC_BWR_PROCTL_SABGREQ(base, 1);
-                break;
-            case kSdhcReadWaitControlEnable:
-                SDHC_BWR_PROCTL_RWCTL(base, 1);
-                break;
-            case kSdhcIntAtBlockGap:
-                SDHC_BWR_PROCTL_IABG(base, 1);
-                break;
-            case kSdhcExactBlockNumRead:
-                SDHC_BWR_VENDOR_EXBLKNU(base, 1);
-                break;
-            default:
-                break;
-        }
-    }
-    else
-    {
-        switch (command)
-        {
-            case kSdhcSetCardDetectLevelForTest:
-				SDHC_BWR_PROCTL_CDSS(base, 0);
-				break;
-			case kSdhcSetCardDetectTestLevel:
-				SDHC_BWR_PROCTL_CDTL(base, 0);
-				break;
-            case kSdhcStopAtBlockGapEnable:
-                SDHC_BWR_PROCTL_SABGREQ(base, 0);
-                break;
-            case kSdhcReadWaitControlEnable:
-                SDHC_BWR_PROCTL_RWCTL(base, 0);
-                break;
-            case kSdhcIntAtBlockGap:
-                SDHC_BWR_PROCTL_IABG(base, 0);
-                break;
-            case kSdhcExactBlockNumRead:
-                SDHC_BWR_VENDOR_EXBLKNU(base, 0);
-                break;
-            default:
-                break;
-        }
-    }
-    
-}
-
-/*FUNCTION****************************************************************
- *
  * Function Name: SDHC_SetCardCommand
  * Description: Sets card command related properties.
  *
  *END*********************************************************************/
-void SDHC_SetCardCommand(SDHC_Type * base, const sdhc_card_cmd_config_t* configPtr)
+void SDHC_SetCardCommand(SDHC_Type *base, const sdhc_card_cmd_config_t *configPtr)
 {
     assert(configPtr);
 
@@ -405,23 +313,20 @@ void SDHC_SetCardCommand(SDHC_Type * base, const sdhc_card_cmd_config_t* configP
     SDHC_BWR_BLKATTR_BLKCNT(base, configPtr->dataBlockCount);
     SDHC_WR_CMDARG(base, configPtr->argument);
     SDHC_WR_XFERTYP(base, ((configPtr->cmdIndex << SDHC_XFERTYP_CMDINX_SHIFT) & SDHC_XFERTYP_CMDINX_MASK)
-            | (configPtr->cmdFlags & (SDHC_XFERTYP_DMAEN_MASK | SDHC_XFERTYP_MSBSEL_MASK | SDHC_XFERTYP_DPSEL_MASK
-                | SDHC_XFERTYP_CMDTYP_MASK | SDHC_XFERTYP_BCEN_MASK | SDHC_XFERTYP_CICEN_MASK
-                | SDHC_XFERTYP_CCCEN_MASK | SDHC_XFERTYP_RSPTYP_MASK | SDHC_XFERTYP_DTDSEL_MASK
-                | SDHC_XFERTYP_AC12EN_MASK)));
+           | (configPtr->cmdFlags & (SDHC_XFERTYP_DMAEN_MASK | SDHC_XFERTYP_MSBSEL_MASK 
+               | SDHC_XFERTYP_DPSEL_MASK | SDHC_XFERTYP_CMDTYP_MASK | SDHC_XFERTYP_BCEN_MASK 
+               | SDHC_XFERTYP_CICEN_MASK | SDHC_XFERTYP_CCCEN_MASK | SDHC_XFERTYP_RSPTYP_MASK 
+               | SDHC_XFERTYP_DTDSEL_MASK | SDHC_XFERTYP_AC12EN_MASK)));
 }
 
-/*!
- * @brief Enables the specified interrupts.
+/*FUNCTION****************************************************************
  *
- * This function can set multiple interrupt enable bits by using the bit 
- * mask defined from SDHC_CMD_COMPLETE_INT to SDHC_DMA_ERR_INT.
+ * Function Name: SDHC_SetIntSignal
+ * Description: Sets multiple interrupt enable bits by using the bit mask defined 
+ * from SDHC_CMD_COMPLETE_INT to SDHC_DMA_ERR_INT.
  *
- * @param base SDHC base address.
- * @param enable Enable or disable interrupt.
- * @param intMask The mask to specify interrupts to be enable.
- */
-void SDHC_SetIntSignal(SDHC_Type * base, bool enable, uint32_t intMask)
+ *END*********************************************************************/
+void SDHC_SetIntSignal(SDHC_Type *base, bool enable, uint32_t intMask)
 {
     if (enable)
     {
@@ -433,51 +338,32 @@ void SDHC_SetIntSignal(SDHC_Type * base, bool enable, uint32_t intMask)
     }
 }
 
-void SDHC_SetIntState(SDHC_Type * base, bool enable, uint32_t intMask)
+/*FUNCTION****************************************************************
+ *
+ * Function Name: SDHC_SetIntState
+ * Description: Sets multiple interrupt status enable bits by using the bit mask defined 
+ * from SDHC_CMD_COMPLETE_INT to SDHC_DMA_ERR_INT.
+ *
+ *END*********************************************************************/
+void SDHC_SetIntState(SDHC_Type *base, bool enable, uint32_t statusMask)
 {
     if (enable)
     {
-        SDHC_SET_IRQSTATEN(base, intMask);
+        SDHC_SET_IRQSTATEN(base, statusMask);
     }
     else
     {
-        SDHC_CLR_IRQSTATEN(base, intMask);
+        SDHC_CLR_IRQSTATEN(base, statusMask);
     }
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SDHC_SetIntCmd
- * Description: Enables the specified interrupts.
+ * Function Name: SDHC_SetMmcBoot
+ * Description: Sets MMC boot related configuration.
  *
  *END*********************************************************************/
-void SDHC_SetPowerState(SDHC_Type * base, const sdhc_power_config_t * configPtr)
-{
-    uint32_t wakeupEventMask;
-    assert(configPtr);
-
-    /* Sets the clock auto gated off feature. */
-	if (configPtr->powerSavingEnable)
-	{
-	    SDHC_BWR_SYSCTL_IPGEN(base, 1);
-    	SDHC_BWR_SYSCTL_HCKEN(base, 1);
-    	SDHC_BWR_SYSCTL_PEREN(base, 1);
-	}
-	else
-	{
-	    SDHC_BWR_SYSCTL_IPGEN(base, 0);
-    	SDHC_BWR_SYSCTL_HCKEN(base, 0);
-    	SDHC_BWR_SYSCTL_PEREN(base, 0);
-
-		/* Sets the wakeup events in low power mode. */
-		wakeupEventMask = (configPtr->lowPowerWakeupEventMask & (SDHC_WAKEUP_ON_CARD_INT
-		                                                       | SDHC_WAKEUP_ON_CARD_INSERT
-		                                                       | SDHC_WAKEUP_ON_CARD_REMOVE));
-		SDHC_SET_PROCTL(base, wakeupEventMask);
-	}
-}
-
-void SDHC_SetMmcBoot(SDHC_Type * base, sdhc_boot_config_t* configPtr)
+void SDHC_SetMmcBoot(SDHC_Type *base, sdhc_boot_config_t *configPtr)
 {
     uint32_t mmcboot;
     assert(configPtr);
@@ -500,15 +386,28 @@ void SDHC_SetMmcBoot(SDHC_Type * base, sdhc_boot_config_t* configPtr)
     }
 }
 
-sdhc_status_t SDHC_InitHost(uint32_t instance, const sdhc_config_t* hostConfig)
+/*FUNCTION****************************************************************
+ *
+ * Function Name: SDHC_InitHost
+ * Description: Enables clock/interrupt and configures the SDHC.
+ *
+ *END*********************************************************************/
+sdhc_status_t SDHC_InitHost(uint32_t instance, const sdhc_config_t *hostConfig, 
+                    sdhc_capability_t *capabilityPtr)
 {
     SDHC_Type *base = &SDHC[instance];
     CLOCK_SYS_EnableSdhcClock(instance);
-    SDHC_Init(base, hostConfig);
+    SDHC_Init(base, hostConfig, capabilityPtr);
     INT_SYS_EnableIRQ(SDHC_IRQn);
     return kStatus_SDHC_NoError;
 }
 
+/*FUNCTION****************************************************************
+ *
+ * Function Name: SDHC_DeInitHost
+ * Description: Disables the SDHC clock/interrupt etc.
+ *
+ *END*********************************************************************/
 sdhc_status_t SDHC_DeInitHost(uint32_t instance)
 {
     SDHC_Type *base = &SDHC[instance];
@@ -517,4 +416,5 @@ sdhc_status_t SDHC_DeInitHost(uint32_t instance)
     SDHC_Reset(base, SDHC_RST_TYPE_ALL, 100);
     return kStatus_SDHC_NoError;
 }
+
 #endif /* #if FSL_FEATURE_SOC_SDHC_COUNT */
