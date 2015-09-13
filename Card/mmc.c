@@ -28,464 +28,180 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
- #include "sdhc.h"
- #include <assert.h>
+
+#include <string.h> 
+
+#include "card.h"
+#include "sdmmc.h"
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SDEMMC_CheckReadOnly
- * Description: Check if the card is ready only
+ * Function Name: MMC_CheckReadOnly
+ * Description: Checks if the card is ready only
  *
  *END*********************************************************************/
-bool EMMC_CheckReadOnly(sd_t *card)
+bool MMC_CheckReadOnly(mmc_card_t *card)
 {
     assert(card);
-    if(kCardTypeSd == card->cardType)
-    {
-        
-    }
-    switch(card->cardType)
-    {
-    case kCardTypeSd:
-      {
-          return ((card->csd.sdCsd.flags & SDCARD_CSD_PERM_WRITE_PROTECT) ||
-            (card->csd.sdCsd.flags & SDCARD_CSD_TMP_WRITE_PROTECT));         
-      }
-    case kCardTypeMmc:
-      {
-          return ((card->csd.mmcCsd.flags & SDCARD_CSD_PERM_WRITE_PROTECT) ||
-            (card->csd.mmcCsd.flags & SDCARD_CSD_TMP_WRITE_PROTECT)); 
-      }
-    default:
-      {
-          return false;/* Default as non-read only */
-      }
-    }
-    
+    return ((card->csd.flags & MMC_CSD_PERM_WRITE_PROTECT) || (card->csd.flags & MMC_CSD_TMP_WRITE_PROTECT)); 
+}
+ 
+/*FUNCTION****************************************************************
+ *
+ * Function Name: MMC_SelectCard
+ * Description: Selects or deselects card
+ *
+ *END*********************************************************************/
+static status_t inline MMC_SelectCard(mmc_card_t *card, bool isSelected)
+{
+    assert(card);
+    return SDMMC_SelectCard(card->host, card->rca, isSelected);
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SDEMMC_SelectCard
- * Description: select or deselect card
+ * Function Name: MMC_SendStatus
+ * Description:  Sends the sd status
  *
  *END*********************************************************************/
-static emmc_status_t EMMC_SelectCard(sd_t *card, bool isSelected)
+static status_t inline MMC_SendStatus(mmc_card_t *card)
 {
-    host_request_t *req = 0;
-#if ! defined BSP_HOST_USING_DYNALLOC
-    host_request_t request = {0};
-    req = &request;
-#endif
     assert(card);
 
-#if defined BSP_HOST_USING_DYNALLOC
-    req = (host_request_t *)OSA_MemAllocZero(sizeof(host_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDEMMC_OutOfMemory;
-    }
-#endif
-    req->cmdIndex = kSelectCard;
-    if (isSelected)
-    {
-        req->argument = card->rca << 16;
-        req->respType = kSdhcRespTypeR1;
-    }
-    else
-    {
-        req->argument = 0;
-        req->respType = kSdhcRespTypeNone;
-    }
-    host->currentReq = req;
-    if (kStatus_SDEMMC_NoError != SDEMMC_IssueRequestBlocking(host))
-    {
-#if defined BSP_HOST_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return kStatus_SDEMMC_RequestFailed;
-    }
-#if defined BSP_HOST_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    /* Wait until card to transfer state */
-    return kStatus_SDEMMC_NoError;
+    return SDMMC_SendStatus(card->host, card->rca);
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SDEMMC_SendStatus
- * Description:  send the sd status
- *
- *END*********************************************************************/
-static sdemmc_status_t EMMC_SendStatus(host_t * host)
-{
-    host_request_t *req = 0;
-    sdemmc_status_t err = kStatus_SDEMMC_NoError;
-    uint32_t timeout = 1000;
-#if ! defined BSP_HOST_USING_DYNALLOC
-    host_request_t request = {0};
-    req = &request;
-#endif
-
-#if defined BSP_HOST_USING_DYNALLOC
-    req = (host_request_t *)OSA_MemAllocZero(sizeof(host_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDEMMC_OutOfMemory;
-    }
-#endif
-    req->cmdIndex = kSendStatus;
-    req->argument = card->rca << 16;
-    req->respType = kSdhcRespTypeR1;
-    do
-    {
-        if (kStatus_SDEMMC_NoError != SDEMMC_IssueRequestBlocking(host))
-        {
-#if defined BSP_HOST_USING_DYNALLOC
-            OSA_MemFree(req);
-#endif
-            req = NULL;
-            return kStatus_SDEMMC_RequestFailed;
-        }
-        if ((req->response[0] & SDEMMC_R1_READY_FOR_DATA)
-             && (SDEMMC_R1_CURRENT_STATE(req->response[0]) != SDEMMC_R1_STATE_PRG))
-        {
-            break;
-        }
-
-        SDEMMC_DelayMsec(1);
-    } while(timeout--);
-
-    if (!timeout)
-    {
-#if defined BSP_HOST_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return kStatus_SDEMMC_TimeoutError;
-    }
-
-#if defined BSP_HOST_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return err;
-}
-
-/*FUNCTION****************************************************************
- *
- * Function Name: SDEMMC_Shutdown
- * Description: destory initialized card and shutdown the corresponding
+ * Function Name: MMC_DeInit
+ * Description: Destories initialized card and shutdown the corresponding
  * host controller
  *
  *END*********************************************************************/
-void EMMC_Shutdown(sd_t *card)
+void MMC_DeInit(mmc_card_t *card)
 {
     assert(card);
-    SDEMMC_SelectCard(card, false);
+    MMC_SelectCard(card, false);
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SDEMMC_SendApplicationCmd
- * Description: send application command to card
+ * Function Name: MMC_SendApplicationCmd
+ * Description: SendS application commandMemory to card
  *
  *END*********************************************************************/
-static sdemmc_status_t EMMC_SendApplicationCmd(sd_t *card)
+static status_t inline MMC_SendApplicationCmd(mmc_card_t *card)
 {
-    host_request_t *req = 0;
-    sdemmc_status_t ret = kStatus_SDEMMC_NoError;
-#if ! defined BSP_HOST_USING_DYNALLOC
-    host_request_t request = {0};
-    req = &request;
-#endif
     assert(card);
 
-#if defined BSP_HOST_USING_DYNALLOC
-    req = (host_request_t *)OSA_MemAllocZero(sizeof(host_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDEMMC_OutOfMemory;
-    }
-#endif
-    req->cmdIndex = kAppCmd;
-    req->argument = 0;
-    if (card->cardType != kCardTypeUnknown)
-    {
-        req->argument = card->rca << 16;
-    }
-    req->respType = kSdhcRespTypeR1;
-
-    if (kStatus_SDEMMC_NoError !=
-            SDEMMC_IssueRequestBlocking(card->hostInstance,
-                                          req,
-                                          FSL_SDCARD_REQUEST_TIMEOUT))
-    {
-        if (req->error & HOST_REQ_ERR_CMD_TIMEOUT)
-        {
-            ret = kStatus_SDEMMC_TimeoutError;
-        }
-        else
-        {
-            ret = kStatus_SDEMMC_RequestFailed;
-        }
-#if defined BSP_HOST_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return ret;
-    }
-
-    if (!(req->response[0] & SDEMMC_R1_APP_CMD))
-    {
-#if defined BSP_HOST_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return kStatus_SDEMMC_CardNotSupport;
-    }
-#if defined BSP_HOST_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return kStatus_SDEMMC_NoError;
+    return SDMMC_SendApplicationCmd(card->host, card->rca);
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SDEMMC_SetBlkCnt
- * Description:  Send the set-block-count command.
+ * Function Name: MMC_SetBlockCount
+ * Description:  Sends the set-block-count commandMemory.
  *
  *END*********************************************************************/
-static sdemmc_status_t EMMC_SetBlkCnt(sd_t* card, uint32_t blockCount)
+static status_t inline MMC_SetBlockCount(mmc_card_t *card, uint32_t blockCount)
 {
-    host_request_t *req = 0;
-    uint32_t index;
-    
-#if ! defined BSP_HOST_USING_DYNALLOC
-    host_request_t request = {0};
-    req = &request;
-#endif
     assert(card);
     
-#if defined BSP_HOST_USING_DYNALLOC
-    req = (host_request_t *)OSA_MemAllocZero(sizeof(host_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDEMMC_OutOfMemory;
-    }
-#endif
-    req->cmdIndex = kSetBlockCount;
-    req->argument = blockCount;
-    req->respType = kSdhcRespTypeR1;
-
-    if(kStatus_SDEMMC_NoError != SDEMMC_IssueRequestBlocking(card->host->instance,
-                                        req,
-                                        FSL_MMC_REQUEST_TIMEOUT))    
-    {   
-    #if defined BSP_HOST_USING_DYNALLOC
-        OSA_MemFree(req);
-    #endif        
-        req = NULL;
-        return kStatus_SDEMMC_PreDefBlkCntFailed;
-    }
-#if defined BSP_HOST_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return kStatus_SDEMMC_NoError;   
+    return SDMMC_SetBlockCount(card->host, blockCount);
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SDEMMC_GoIdle
- * Description: reset all cards to idle state
+ * Function Name: MMC_GoIdle
+ * Description: Resets all cards to idle state
  *
  *END*********************************************************************/
-static sdemmc_status_t EMMC_GoIdle(host_t* host)
+static status_t inline MMC_GoIdle(mmc_card_t *card)
 {
-    host_request_t *req = 0;
-    sdemmc_status_t err;
-#if ! defined BSP_HOST_USING_DYNALLOC
-    host_request_t request = {0};
-    req = &request;
-#endif
-
-#if defined BSP_HOST_USING_DYNALLOC
-    req = (host_request_t *)OSA_MemAllocZero(sizeof(host_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDEMMC_OutOfMemory;
-    }
-#endif
-    req->cmdIndex = kGoIdleState;
-    host->currentReq = req;
-    err = SDEMMC_IssueRequestBlocking(host, CARD_REQUEST_TIMEOUT);
-#if defined BSP_HOST_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return err;
+    assert(card);
+    
+    return SDMMC_GoIdle(card->host);
 }
 
-#if ! defined BSP_HOST_ENABLE_AUTOCMD12
 /*FUNCTION****************************************************************
  *
- * Function Name: SDEMMC_StopTransmission
- * Description:  Send stop transmission command to card to stop ongoing
+ * Function Name: MMC_StopTransmission
+ * Description:  Sends stop transmission commandMemory to card to stop ongoing
  * data transferring.
  *
  *END*********************************************************************/
-static sdemmc_status_t EMMC_StopTransmission(host_t * host)
+static status_t inline MMC_StopTransmission(mmc_card_t *card)
 {
-    host_request_t *req = 0;
-    sdemmc_status_t err = kStatus_SDEMMC_NoError;
-#if ! defined BSP_HOST_USING_DYNALLOC
-    host_request_t request = {0};
-    req = &request;
-#endif
-
-#if defined BSP_HOST_USING_DYNALLOC
-    req = (host_request_t *)OSA_MemAllocZero(sizeof(host_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDEMMC_OutOfMemory;
-    }
-#endif
-
-    req->cmdIndex = kStopTransmission;
-    req->argument = 0;
-    req->respType = kSdhcRespTypeR1b;
-    req->data = 0;
-    host->currentReq = req;
-    if (kStatus_SDEMMC_NoError != SDEMMC_IssueRequestBlocking(host, CARD_REQUEST_TIMEOUT))
-    {
-#if defined BSP_HOST_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return kStatus_SDEMMC_RequestFailed;
-    }
-
-#if defined BSP_HOST_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return err;
-}
-#endif
-
-/*FUNCTION****************************************************************
- *
- * Function Name: SDEMMC_SetBlockSize
- * Description:  Set the block length in bytes for SDSC cards. For SDHC cards,
- * it does not affect memory read or write commands, always 512 bytes fixed
- * block length is used.
- *
- *END*********************************************************************/
-static sdemmc_status_t EMMC_SetBlockSize(host_t * host, uint32_t blockSize)
-{
-    host_request_t *req = 0;
-#if ! defined BSP_HOST_USING_DYNALLOC
-    host_request_t request = {0};
-    req = &request;
-#endif
-
-#if defined BSP_HOST_USING_DYNALLOC
-    req = (host_request_t *)OSA_MemAllocZero(sizeof(host_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDEMMC_OutOfMemory;
-    }
-#endif
-    req->cmdIndex = kSetBlockLen;
-    req->argument = blockSize;
-    req->respType = kSdhcRespTypeR1;
-    host->currentReq = req;
-    if (kStatus_SDEMMC_NoError != SDEMMC_IssueRequestBlocking(host, CARD_REQUEST_TIMEOUT))
-    {
-#if defined BSP_HOST_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return kStatus_SDEMMC_RequestFailed;
-    }
-
-#if defined BSP_HOST_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return kStatus_SDEMMC_NoError;
-}
-
-/*FUNCTION****************************************************************
- *
- * Function Name: EMMC_VolValid
- * Description: Validate the card voltage range if equals to host intended voltage range
- *
- *END*********************************************************************/
-static sdhc_status_t EMMC_VolValid(sdhc_card_t *card, bool hostIntendedVolRange)
-{
-    sdhc_request_t *req = 0;
-    sdhc_status_t err;
-    uint8_t v170To195;
-    uint16_t v270To360;
-    uint8_t accMode;
-    
     assert(card);
+
+    SDMMC_StopTransmission(card->host);
+}
+
+/*FUNCTION****************************************************************
+ *
+ * Function Name: MMC_SetBlockSize
+ * Description:  Sets the block length in bytes for MMC cards.
+ *
+ *END*********************************************************************/
+static status_t inline MMC_SetBlockSize(mmc_card_t *card, uint32_t blockSize)
+{
+    assert(card);
+
+    SDMMC_SetBlockSize(card->host, blockSize);
+}
+
+/*FUNCTION****************************************************************
+ *
+ * Function Name: MMC_ValidateVolt
+ * Description: Validates if the card voltage range equals to host intended voltage range
+ *
+ *END*********************************************************************/
+static status_t MMC_ValidateVolt(mmc_card_t *card, bool hostVoltRange)
+{
+    sdhc_cmd_t command = {0};
+    sdhc_host_t *host;
+    uint8_t accessMode;
+    status_t err = kStatus_Success;
+    assert(card);
+
+    host = card->host;
     /* Save host intended voltage range */
-    card->hostIntVol       = kVol270to360;
-#if ! defined BSP_FSL_SDHC_USING_DYNALLOC
-    sdhc_request_t request = {0};
-    req = &request;
-#endif
-    err = kStatus_SDHC_NoError;
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    req = (sdhc_request_t *)OSA_MemAllocZero(sizeof(sdhc_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDHC_OutOfMemory;
-    }
-#endif
+    card->hostVoltRange = kMMC_Volt270to360;
     
-    /* Send CMD1, with the intended voltage range in the argument 
-    (either 0x00FF8000 or 0x00000080) */
-    req->cmdIndex = kSendOpCond;
-    if(hostIntendedVolRange == kVol170to195)
+    /* Send CMD1, with the intended voltage range in the argument (either 0x00FF8000 or 0x00000080) */
+    command.index = kMMC_SendOpCond;
+    if (hostVoltRange == kMMC_Volt170to195)
     {
-        card->ocr.mmcOcr = 0;
-        card->ocr.mmcOcr |=  (kVol170to195<<MMC_OCR_V170TO195_POS);
-        req->argument = card->ocr.mmcOcr;
+        card->ocr = 0;
+        card->ocr |=  (kMMC_Volt170to195 << MMC_OCR_V170TO195_POS);
+        command.argument = card->ocr;
     }
     else
     {
-        card->ocr.mmcOcr = 0;
-        card->ocr.mmcOcr |= (kVol270to360<<MMC_OCR_V270TO360_POS);
-        req->argument = card->ocr.mmcOcr;
+        card->ocr = 0;
+        card->ocr |= (kMMC_Volt270to360 << MMC_OCR_V270TO360_POS);
+        command.argument = card->ocr;
     }
-    req->respType = kSdhcRespTypeR3;
+    command.responseType = kSDHC_ReponseTypeR3;
+
+    host->currentCmd = &command;
+    host->currentData = 0;
     
     do
     {
-        err = SDHC_DRV_IssueRequestBlocking(card->host->instance,
-                                        req,
-                                        FSL_MMC_REQUEST_TIMEOUT);
-        if (kStatus_SDHC_NoError == err)
+        err = SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT);
+        if (kStatus_Success == err)
         {
-            if(!((req->response[0] & MMC_OCR_BUSY_MASK) >> MMC_OCR_BUSY_POS))/* Return busy state */
+            if(!((command->response[0] & MMC_OCR_BUSY_MASK) >> MMC_OCR_BUSY_POS))/* Return busy state */
             {
-                req = NULL;
                 continue;
             }
             else
             {
                 /* Get the voltage range and access mode in the OCR register */
-                card->ocr.mmcOcr = req->response[0];
+                card->ocr = command->response[0];
                 /* Save raw OCR register content */
-                //card->ocr        = req->response[0];
+                //card->ocr        = command->response[0];
                 break;
             }
         }
@@ -493,121 +209,93 @@ static sdhc_status_t EMMC_VolValid(sdhc_card_t *card, bool hostIntendedVolRange)
         {
             break;
         }
-        
-    }while(1);
-    if (kStatus_SDHC_NoError == err)
-    {
-    #if defined BSP_FSL_SDHC_USING_DYNALLOC
-        OSA_MemFree(req);
-    #endif        
-        req = NULL;
-        return kStatus_SDHC_NoError;
-    }
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
+    } while(1);
+
     return err;
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_SetRelAddr
- * Description: Set the relative address of the card.
+ * Function Name: MMC_SetRelativeAddress
+ * Description: Sets the relative address of the card.
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_SetRelAddr(sdhc_card_t *card)
+static status_t MMC_SetRelativeAddress(mmc_card_t *card)
 {
-    sdhc_request_t *req = 0;
-    sdhc_status_t err;
-
-#if ! defined BSP_FSL_SDHC_USING_DYNALLOC
-    sdhc_request_t request = {0};
-    req = &request;
-#endif
+    sdhc_cmd_t command = {0};
+    sdhc_host_t *host;
     assert(card);
+    assert(card->host);
 
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    req = (sdhc_request_t *)OSA_MemAllocZero(sizeof(sdhc_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDHC_OutOfMemory;
-    }
-#endif
+    host = card->host;
+
     /* Send CMD3 with a chosen RCA, with value greater than 1 */
-    req->cmdIndex = kMmcSetRelativeAddr;
-    req->argument = (MMC_DEFAULT_RSA<<16);
-    req->respType = kSdhcRespTypeR1;
-    err = SDHC_DRV_IssueRequestBlocking(card->host->instance,
-                                        req,
-                                        FSL_MMC_REQUEST_TIMEOUT);
-    
-    if (kStatus_SDHC_NoError == err)
+    command.index = kMMC_SetRelativeAddr;
+    command.argument = (MMC_DEFAULT_RSA << 16);
+    command.responseType = kSDHC_ReponseTypeR1;
+
+    host->currentCmd = &command;
+    host->currentData = 0;
+
+    if ((kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)) 
+        || (!SDMMC_R1_ERROR_BITS(command->response[0]))) 
     {
-        card->rca = MMC_DEFAULT_RSA;
-    #if defined BSP_FSL_SDHC_USING_DYNALLOC
-        OSA_MemFree(req);
-    #endif        
-        req = NULL;
-        return kStatus_SDHC_NoError;
+        card->rca = MMC_DEFAULT_RSA;      
+        return kStatus_SDMMC_SetRelativeAddrFailed;
     }
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return err;
+
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_CalDevSizeAsBlks
- * Description: Calculate the size of the card.
+ * Function Name: MMC_CalculateTotalBlockCount
+ * Description: Calculates the size of the card.
  *
  *END*********************************************************************/
-static void EMMC_CalDevSizeAsBlks(sdhc_card_t* card)
+static void MMC_CalculateTotalBlockCount(mmc_card_t *card)
 {
     uint32_t c_size,c_size_mult, mult, read_bl_len, block_len;
-    uint32_t blkSizeDef = FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE;/* Default block size after power on */    
+    uint32_t blkSizeDef = FSL_CARD_DEFAULT_BLOCK_SIZE;/* Default block size after power on */    
     assert(card);
     
-    c_size                   = card->csd.mmcCsd.c_size;
-    /*  For higher than 2GB of density of card the maximum possible value should
-    be set to this register (0xFFF) */
+    c_size                   = card->csd.c_size;
+    /*  For higher than 2GB of density of card the maximum possible value should be set to this register (0xFFF) */
     if(c_size != 0xFFF)
     {
-        c_size_mult              = card->csd.mmcCsd.c_size_mult;
+        c_size_mult              = card->csd.c_size_mult;
         mult                     = (2 << (c_size_mult + 2 - 1));
-        read_bl_len              = card->csd.mmcCsd.readBlkLen;
+        read_bl_len              = card->csd.readBlkLen;
         block_len                = (2 << (read_bl_len - 1));
         
         card->blockCount         = (((c_size + 1)*mult)/blkSizeDef);        
     }
-    else /* For higher than 2GB of density of card, the device size represented 
-      by sector-count field in the EXT_CSD */
+    else /* For higher than 2GB of density of card, the device size represented by sector-count field in the EXT_CSD */
     {
-        card->blockCount         = card->ext1.mmcExtCsd.sectorCount;          
-        card->caps              |= SDMMC_CARD_CAPS_HIGHCAPACITY;
+        card->blockCount         = card->extCsd.sectorCount;          
+        card->caps              |= MMC_CAPS_HIGH_CAPACITY;
     }
-    card->blockSize              = FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE;
+    card->blockSize              = FSL_CARD_DEFAULT_BLOCK_SIZE;
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_DecodeCsd
- * Description: Decode the CSD register content.
+ * Function Name: MMC_DecodeCsd
+ * Description: Decodes the CSD register content.
  *
  *END*********************************************************************/
-static void EMMC_DecodeCsd(uint32_t *rawCsd, sdhc_card_t *card)
+static void MMC_DecodeCsd(uint32_t *rawCsd, mmc_card_t *card)
 {
-    mmccard_csd_t *csd;
+    mmc_csd_t *csd;
     assert(rawCsd);
     assert(card);
-    csd = &(card->csd.mmcCsd);
+
+    csd = &(card->csd);
     csd->csdStructVer = (uint8_t)((rawCsd[3] & 0xC0000000U) >> 30);
     csd->sysSpecVer   = (uint8_t)((rawCsd[3] & 0x30000000U) >> 28);
     if(4 == csd->sysSpecVer)
     {
-         card->caps |= SDMMC_CARD_CAPS_HIGHSPEED;         
+         card->caps |= MMC_CAPS_HIGH_SPEED;         
     }
     csd->taac = (uint8_t)((rawCsd[3] & 0xFF0000) >> 16);
     csd->nsac = (uint8_t)((rawCsd[3] & 0xFF00) >> 8);
@@ -617,19 +305,19 @@ static void EMMC_DecodeCsd(uint32_t *rawCsd, sdhc_card_t *card)
     csd->readBlkLen = (uint8_t)((rawCsd[2] & 0xF0000) >> 16);
     if (rawCsd[2] & 0x8000)
     {
-        csd->flags |= MMCCARD_CSD_READ_BL_PARTIAL;
+        csd->flags |= MMC_CSD_READ_BL_PARTIAL;
     }
     if (rawCsd[2] & 0x4000)
     {
-        csd->flags |= MMCCARD_CSD_WRITE_BLK_MISALIGN;
+        csd->flags |= MMC_CSD_WRITE_BLOCK_MISALIGN;
     }
     if (rawCsd[2] & 0x2000)
     {
-        csd->flags |= MMCCARD_CSD_READ_BLK_MISALIGN;
+        csd->flags |= MMC_CSD_READ_BLOCK_MISALIGN;
     }
     if (rawCsd[2] & 0x1000)
     {
-        csd->flags |= MMCCARD_CSD_DSR_IMP;
+        csd->flags |= MMC_CSD_DSR_IMP;
     }
     csd->c_size = (uint16_t)(((rawCsd[2]&0x300)<<2) + ((rawCsd[2]&0xFF) << 2) 
                                + (rawCsd[1]&0xC0000000)>>30 );
@@ -643,39 +331,40 @@ static void EMMC_DecodeCsd(uint32_t *rawCsd, sdhc_card_t *card)
     csd->wpGrpSize     = (uint8_t)(rawCsd[1]&0x0000001F);
     if(rawCsd[0] & 0x80000000)
     {
-        csd->flags |= MMCCARD_CSD_WP_GRP_ENABLED;
+        csd->flags |= MMC_CSD_WP_GRP_ENABLED;
     }
     csd->defaultEcc    = (uint8_t)((rawCsd[0] & 0x60000000) >> 29);
     csd->writeSpeedFactor = (uint8_t)((rawCsd[0] & 0x1C000000) >> 26); 
     csd->maxWriteBlkLen   = (uint8_t)((rawCsd[0] & 0x03C00000) >> 22);
     if(rawCsd[0] & 0x00200000)
     {
-        csd->flags |= MMCCARD_CSD_WRITE_BL_PARTIAL;
+        csd->flags |= MMC_CSD_WRITE_BL_PARTIAL;
     }
     if(rawCsd[0] & 0x00010000)
     {
-        csd->flags |= MMCCARD_CSD_CONTENT_PROT_APP;
+        csd->flags |= MMC_CSD_CONTENT_PROT_APP;
     }
     if(rawCsd[0] & 0x00008000)
     {
-        csd->flags |= MMCCARD_CSD_FILE_FORMAT_GROUP;
+        csd->flags |= MMC_CSD_FILE_FORMAT_GROUP;
     }
     if(rawCsd[0] & 0x00004000)
     {
-        csd->flags |= MMCCARD_CSD_COPY;
+        csd->flags |= MMC_CSD_COPY;
     }
     if(rawCsd[0] & 0x00002000)
     {
-        csd->flags |= MMCCARD_CSD_PERM_WRITE_PROTECT;
+        csd->flags |= MMC_CSD_PERM_WRITE_PROTECT;
     }
     if(rawCsd[0] & 0x00001000)
     {
-        csd->flags |= MMCCARD_CSD_TMP_WRITE_PROTECT;
+        csd->flags |= MMC_CSD_TMP_WRITE_PROTECT;
     }
     csd->fileFormat = (uint8_t)((rawCsd[0] & 0x00000C00) >> 10);
     csd->eccCode    = (uint8_t)((rawCsd[0] & 0x00000300) >> 8);
+
     /* Calculate the device size */
-    EMMC_CalDevSizeAsBlks(card); 
+    MMC_CalculateTotalBlockCount(card); 
 }
 
 /*!
@@ -685,203 +374,198 @@ static void EMMC_DecodeCsd(uint32_t *rawCsd, sdhc_card_t *card)
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_SetMaxTranSpeed
- * Description: Set the card to max transfer speed
+ * Function Name: MMC_SetToMaxClockInNormalMode
+ * Description: Sets the card to max transfer speed in non-high speed mode.
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_SetMaxNonHsSpeed(sdhc_card_t* card)
+static status_t MMC_SetToMaxClockInNormalMode(mmc_card_t *card)
 {
-    uint32_t freqUnitInCsd;
-    uint32_t mult10InCsd;
-    uint32_t maxFreq; 
-    /* g_freqUnitInTranSpeed and g_mult10InTranSpeed are used to calculate the max speed 
+    uint32_t freqUnit;
+    uint32_t multFactor;
+    uint32_t maxFreqInNormal; 
+    sdhc_sd_clock_config_t sdClockConfig = {0};
+    assert(card);
+    
+    /* g_fsdhcCmdUnitInTranSpeed and g_mult10InTranSpeed are used to calculate the max speed 
       in 1 bit mode of card.
       To MMC card: For cards supporting version 4.0, 4.1, and 4.2 of the specification,
       the value shall be 20MHz (0x2A). For cards supporting version 4.3, the value 
-      shall be 26 MHz (0x32). In High speed mode, the max frequence is decided by 
+      shall be 26 MHz (0x32). In High speed mode, the max fsdhcCmduence is decided by 
       CARD_TYPE in EXT_CSD. 
       To SD card: Note that for current SD Memory Cards, this field shall be always 
       0_0110_010b (032h) which is equal to 25 MHz - the mandatory maximum operating 
-      frequency of SD Memory Card. In High-Speed mode, this field shall be always 
+      fsdhcCmduency of SD Memory Card. In High-Speed mode, this field shall be always 
       0_1011_010b (05Ah) which is equal to 50 MHz, and when the timing mode returns 
-      to the default by CMD6 or CMD0 command, its value will be 032h. */
-    /* Frequence unit defined in TRAN-SPEED field in CSD */
+      to the default by CMD6 or CMD0 commandMemory, its value will be 032h. */
+    /* FsdhcCmduence unit defined in TRAN-SPEED field in CSD */
     uint32_t g_freqUnitInTranSpeed[] = {100000, 1000000, 10000000, 100000000};
     /* The multiplying value defined in TRAN-SPEED field in CSD */
     uint32_t g_mult10InTranSpeed[]   = {0, 10, 12, 13, 15, 20, 26, 30, 35, 40, 45,\
                                52, 55, 60, 70, 80};
-
-    assert(card);
     
-    freqUnitInCsd       = g_freqUnitInTranSpeed[RD_MMC_CSD_TRAN_SPEED_FREQ_UNIT(card->csd.mmcCsd)];
-    mult10InCsd         = g_mult10InTranSpeed[RD_MMC_CSD_TRAN_SPPED_MULT(card->csd.mmcCsd)];
-    maxFreq             = (freqUnitInCsd*mult10InCsd)/MULT_DIV_IN_TRAN_SPEED;
-    if (SDHC_DRV_ConfigClock(card->host->instance, maxFreq))
-    {
-        return kStatus_SDHC_SetClockFailed;
-    }
-    return kStatus_SDHC_NoError;
+    freqUnit = g_freqUnitInTranSpeed[RD_MMC_CSD_TRAN_SPEED_FREQ_UNIT(card->csd)];
+    multFactor = g_mult10InTranSpeed[RD_MMC_CSD_TRAN_SPPED_MULT_FACTOR(card->csd)];
+    maxFreqInNormal = (fsdhcCmdUnitInCsd*mult10InCsd)/MULT_DIV_IN_TRAN_SPEED;
+
+    sdClockConfig.enableSdClock = true;
+    sdClockConfig.baseClockFreq = host->capability->sourceClockFreq;
+    sdClockConfig.sdClockFreq = maxFreqInNormal;    
+    SDHC_SetSdClockConfig(host->base, &sdClockConfig);
+
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_CalLegacyErsUnitSize
+ * Function Name: MMC_CalculateLegacyEraseUnitSize
  * Description: Calculate legacy erase unit size
  *
  *END*********************************************************************/
-static void EMMC_CalLegacyErsUnitSize(sdhc_card_t* card)
+static void MMC_CalculateLegacyEraseUnitSize(mmc_card_t *card)
 {
-    uint32_t erase_grp_size, erase_grp_mult;
+    uint32_t erase_group_size, erase_group_mult;
     assert(card);
     
-    erase_grp_size                    = card->csd.mmcCsd.eraseGrpSize;
-    erase_grp_mult                    = card->csd.mmcCsd.eraseGrpSizeMult;
-    card->mmcErsGrpSizeAsBlk          = ((erase_grp_size + 1)*(erase_grp_mult + 1));
-    card->mmcErsGrpCnt                = (((card->blockCount)/(card->mmcErsGrpSizeAsBlk)) - 1);     
+    erase_group_size = card->csd.eraseGrpSize;
+    erase_group_mult = card->csd.eraseGrpSizeMult;
+    card->eraseGroupSize  = ((erase_group_size + 1)*(erase_group_mult + 1));
+    card->writeProtectGroupSize = (card->csd.wpGrpSize + 1);
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_CalHCErsUnitSize
+ * Function Name: MMC_CalculateHighCapacityEraseUnitSize
  * Description: Calculate high capacity erase unit size
  *
  *END*********************************************************************/
-static void EMMC_CalHCErsUnitSize(sdhc_card_t* card)
+static void MMC_CalculateHighCapacityEraseUnitSize(mmc_card_t *card)
 {
     assert(card);
-    if((0 == card->ext1.mmcExtCsd.HC_ERASE_GRP_SIZE) | (0 == card->ext1.mmcExtCsd.ERASE_TIMEOUT_MULT) )
+
+    if((0 == card->extCsd.HC_ERASE_GRP_SIZE) | (0 == card->extCsd.ERASE_TIMEOUT_MULT) )
     {
-        EMMC_CalLegacyErsUnitSize(card);
+        MMC_CalculateLegacyEraseUnitSize(card);
         return;
     }
-    card->mmcErsGrpSizeAsBlk          = card->ext1.mmcExtCsd.HC_ERASE_GRP_SIZE;
-    card->mmcErsGrpCnt                = (((card->blockCount)/(card->mmcErsGrpSizeAsBlk)) - 1);   
+    card->eraseGroupSize = (card->extCsd.HC_ERASE_GRP_SIZE*1024); 
+    card->writeProtectGroupSize = card->extCsd.hc_wp_grp_size;
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_CalErsUnitSize
+ * Function Name: MMC_CalculateEraseUnitSize
  * Description: Calculate erase unit size of the card
  *
  *END*********************************************************************/
-static void EMMC_CalErsUnitSize(sdhc_card_t* card)
+static void MMC_CalculateEraseUnitSize(mmc_card_t *card)
 {
     assert(card);
+
     /* If the master enables bit ¡°0¡± in the extended CSD register byte [175], 
     the slave uses high capacity value for the erase operation */
-    if((card->ext1.mmcExtCsd.ERASE_GROUP_DEF)&0x01)
+    if((card->extCsd.ERASE_GROUP_DEF)&0x01)
     {
-        EMMC_CalLegacyErsUnitSize(card);
+        MMC_CalculateLegacyEraseUnitSize(card);
     }
     else
     {
-        EMMC_CalHCErsUnitSize(card);
+        MMC_CalculateHighCapacityEraseUnitSize(card);
     }
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_FillExtCsdByte
- * Description: Fill the specific field of the card according to the index and 
+ * Function Name: MMC_SetExtCsdByte
+ * Description: Sets the specific field of the card according to the index and 
  * value inputted by the user.
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_FillExtCsdByte(sdhc_card_t* card, mmc_extcsd_op_t* op)
+static status_t MMC_SetExtCsdByte(mmc_card_t *card, mmc_ext_csd_operation_t *operation)
 {
-    uint32_t param = 0;
-    sdhc_request_t *req = 0;
-    sdhc_status_t err = kStatus_SDHC_NoError;
-    sdhc_data_t data = {0};    
-    
+    sdhc_cmd_t command = {0};
+    sdhc_host_t *host;
     assert(card);
-    assert(op);
+    assert(card->host);
+    assert(operation);
+
+    host = card->host;
+    uint32_t param = 0;
+    status_t err = kStatus_Success;  
     
-    param |= (op->cmdSet << MMC_SWITCH_PARAM_CMD_SET_POS);
-    param |= (op->value << MMC_SWITCH_PARAM_VALUE_POS);
-    param |= (op->indexOfByte << MMC_SWITCH_PARAM_INDEX_OF_BYTE_POS);
-    param |= (op->accMode << MMC_SWITCH_PARAM_ACCESS_MODE_POS);
-#if ! defined BSP_FSL_SDHC_USING_DYNALLOC
-    sdhc_request_t request = {0};
-    req = &request;
-#endif
+    param |= (operation->cmdSet << MMC_SWITCH_PARAM_CMD_SET_POS);
+    param |= (operation->value << MMC_SWITCH_PARAM_VALUE_POS);
+    param |= (operation->indexOfByte << MMC_SWITCH_PARAM_INDEX_OF_BYTE_POS);
+    param |= (operation->accessMode << MMC_SWITCH_PARAM_ACCESS_MODE_POS);
     
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    req = (sdhc_request_t *)OSA_MemAllocZero(sizeof(sdhc_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDHC_OutOfMemory;
+    command.index = kMMC_Switch;
+    command.argument = param;
+    command.responseType = kSDHC_ReponseTypeR1b;/* Send switch commandMemory to set the pointed byte*/
+
+    host->currentCmd = &command;
+    host->currentData = 0;
+
+    if ((kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)) 
+        || (!SDMMC_R1_ERROR_BITS(command->response[0])))    
+    {         
+        return kStatus_SDMMC_SwitchFailed;
     }
-#endif
-    req->cmdIndex = kMmcSwitch;
-    req->argument = param;
-    req->respType = kSdhcRespTypeR1b;/* Send switch command to set the pointed byte*/
-    if(kStatus_SDHC_NoError != SDHC_DRV_IssueRequestBlocking(card->host->instance,
-                                        req,
-                                        FSL_MMC_REQUEST_TIMEOUT))    
-    {   
-    #if defined BSP_FSL_SDHC_USING_DYNALLOC
-        OSA_MemFree(req);
-    #endif        
-        req = NULL;
-        return kStatus_SDHC_SendMMCSwitchCmdError;
-    }
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
+
     /* wait for the card to be out of BUSY */
-    if(kStatus_SDHC_NoError != SDEMMC_SendStatus(card))
+    if(kStatus_Success != MMC_SendStatus(card))
     {
-        return kStatus_SDHC_SendCardStatusFailed;
+        return kStatus_SDMMC_SendStatusFailed;
     } 
-    return kStatus_SDHC_NoError;   
+
+    return kStatus_Success;   
 }
 
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_EnableHCErsUnitSize
- * Description: Enable the high capacity erase feature of the card.
+ * Function Name: MMC_EnableHighCapacityEraseUnitSize
+ * Description: Enables the high capacity erase feature of the card.
  *
  *END*********************************************************************/
-static void EMMC_EnableHCErsUnitSize(sdhc_card_t* card)
+static void MMC_EnableHighCapacityEraseUnitSize(mmc_card_t *card)
 {
     /* Enable the high capacity erase unit */
-    mmc_extcsd_op_t op;
+    mmc_ext_csd_operation_t operation;
     assert(card);
-    op.accMode      = kSetBits;
-    op.indexOfByte  = ERASE_GRP_DEF_INDEX;
-    op.value        = 0x01;/* The high capacity erase unit size enablement bit is bit 0*/
-    EMMC_FillExtCsdByte(card, &op);
+
+    operation.accessMode = kMMC_ExtCsdSetBits;
+    operation.indexOfByte = MMC_EXT_CSD_ERASE_GRP_DEF_INDEX;
+    operation.value = 0x01;/* The high capacity erase unit size enablement bit is bit 0*/
+    MMC_SetExtCsdByte(card, &operation);
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_DecodeExtCsd
- * Description: Decode the EXT_CSD register
+ * Function Name: MMC_DecodeExtCsd
+ * Description: Decodes the EXT_CSD register
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_DecodeExtCsd(uint32_t* rawExtCsd, sdhc_card_t* card)
+static status_t MMC_DecodeExtCsd(uint32_t *rawExtCsd, mmc_card_t *card)
 {
-    mmccard_extcsd_t* extCsd;
+    mmc_ext_csd_t *extCsd;
     assert(rawExtCsd);
     assert(card);
     
-    extCsd                        = &(card->ext1.mmcExtCsd);
+    extCsd                        = &(card->extCsd);
     extCsd->supportedCmdSet       = (rawExtCsd[1]&0x000000FF);
     extCsd->bootInfo              = (rawExtCsd[70]&0x000000FF);
-    if(kSupAltBoot == extCsd->bootInfo)
+    if(kMMC_SupportAlterBoot == extCsd->bootInfo)
     {/* Card support alternate boot*/
-        card->caps               |= MMC_CARD_SUP_ALT_BOOT;
+        card->caps               |= MMC_CAPS_ALTER_BOOT;
     }
     extCsd->bootSizeMult          = ((rawExtCsd[71]&0x00FF0000)>>16);
     /* Get boot partition size*/
-    card->bootPartSizeAsByte      = (128*1024*extCsd->bootSizeMult);
+    card->bootPartitionSize      = ((128*1024*extCsd->bootSizeMult)
+                                    /FSL_CARD_DEFAULT_BLOCK_SIZE);
       
     extCsd->accessSize            = ((rawExtCsd[71]&0x0000FF00)>>8);
     extCsd->HC_ERASE_GRP_SIZE     = ((rawExtCsd[71]&0x000000FF));
     extCsd->ERASE_TIMEOUT_MULT    = ((rawExtCsd[72]&0xFF000000)>>24);
-    extCsd->reliableWrSecCnt      = ((rawExtCsd[72]&0x00FF0000)>>16);
+    extCsd->reliableWriteSectorCount = ((rawExtCsd[72]&0x00FF0000)>>16);
     extCsd->hc_wp_grp_size        = ((rawExtCsd[72]&0x0000FF00)>>8);
     extCsd->sleepCurrentVCC       = (rawExtCsd[72]&0x000000FF);
     extCsd->sleepCurrentVCCQ      = ((rawExtCsd[73]&0xFF000000)>>24);
@@ -899,436 +583,403 @@ static sdhc_status_t EMMC_DecodeExtCsd(uint32_t* rawExtCsd, sdhc_card_t* card)
     extCsd->PWR_CL_52_195         = (rawExtCsd[77]&0x000000FF);
     extCsd->cardType              = (rawExtCsd[78]&0x000000FF);
     extCsd->csdStrucVer           = ((rawExtCsd[79]&0x00FF0000)>>16);
-    extCsd->extcsdVer             = (rawExtCsd[79]&0x000000FF);
+    extCsd->extCsdVer             = (rawExtCsd[79]&0x000000FF);
     /* If ext_csd version is V4.3, high capacity erase feature can only be enabled
     in MMC V4.3 */
-    if(extCsd->extcsdVer == kextcsdVer13)
+    if(extCsd->extCsdVer == kMMC_ExtCsdVer13)
     {
         /* Enable the high capacity erase unit */
-        EMMC_EnableHCErsUnitSize(card);
+        MMC_EnableHighCapacityEraseUnitSize(card);
     }
     extCsd->cmdSet                = ((rawExtCsd[80]&0xFF000000)>>24);  
     extCsd->cmdSetRev             = ((rawExtCsd[80]&0x0000FF00)>>8);
-    extCsd->powerCls              = ((rawExtCsd[81]&0xFF000000)>>24);
-    extCsd->HS_TIMING             = ((rawExtCsd[81]&0x0000FF00)>>8);
+    extCsd->powerClass = ((rawExtCsd[81]&0xFF000000)>>24);
+    extCsd->highSpeedTiming = ((rawExtCsd[81]&0x0000FF00)>>8);
     extCsd->busWidth              = ((rawExtCsd[82]&0xFF000000)>>24);
     extCsd->erasedMemCnt          = ((rawExtCsd[82]&0x0000FF00)>>8);
     extCsd->bootConfig            = ((rawExtCsd[83]&0xFF000000)>>24);
     extCsd->bootBusWidth          = ((rawExtCsd[83]&0x0000FF00)>>8);
     extCsd->ERASE_GROUP_DEF       = ((rawExtCsd[84]&0xFF000000)>>24);
     /* Calculate the erase unit size */
-    EMMC_CalErsUnitSize(card);
-    return kStatus_SDHC_NoError;
+    MMC_CalculateEraseUnitSize(card);
+    return kStatus_Success;
 } 
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_SendExtCsd
+ * Function Name: MMC_SendExtCsd
  * Description: Get the content of the EXT_CSD register
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_SendExtCsd(sdhc_card_t* card)
+static status_t MMC_SendExtCsd(mmc_card_t *card)
 {
-    sdhc_request_t *req = 0;
-    sdhc_status_t err = kStatus_SDHC_NoError;
+    sdhc_cmd_t command = {0};
+    sdhc_host_t *host;
+
+    assert(card);
+    assert(card->host);
+
+    host = card->host;
     sdhc_data_t data = {0};
     uint32_t index;
-#if ! defined BSP_FSL_SDHC_USING_DYNALLOC
-    sdhc_request_t request = {0};
-    req = &request;
-#endif
-    assert(card);
 
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    req = (sdhc_request_t *)OSA_MemAllocZero(sizeof(sdhc_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDHC_OutOfMemory;
-    }
-#endif
-    req->cmdIndex = kMmcSendExtCsd;
-    req->argument = 0;
-    req->respType = kSdhcRespTypeR1;
-    req->flags    = FSL_SDHC_REQ_FLAGS_DATA_READ;
-    req->data     = &data;
+    command.index = kMMC_SendExtCsd;
+    command.argument = 0;
+    command.responseType = kSDHC_ReponseTypeR1;
+
+    data.flags    = CARD_DATA_FLAGS_DATA_READ;
     data.blockCount = 1;
-    data.blockSize  = MMC_EXTCSD_LEN_AS_BYTE;
-    data.buffer     = card->rawExt1.rawExtcsd;
-    data.req        = req;
-    err = SDHC_DRV_IssueRequestBlocking(card->host->instance,
-                                        req,
-                                        FSL_MMC_REQUEST_TIMEOUT);
-    
-    if (kStatus_SDHC_NoError == err)
+    data.blockSize  = MMC_EXT_CSD_LEN_AS_BYTE;
+    data.buffer     = card->rawExtCsd;
+
+    host->currentCmd = &command;
+    host->currentData = &data;
+
+    if ((kStatus_Success == SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)) 
+        && (SDMMC_R1_ERROR_BITS(command->response[0]))
+        && (kStatus_Success == SDHC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))
     {        
-        /*The response is from bit 127:8 in R2, corisponding to req->response[3]
-        :req->response[0][31:8]*/
-        for(index=0; index<MMC_EXTCSD_LEN_AS_WORD; index++)
+        /*The response is from bit 127:8 in R2, corrsponding to command->response[3]
+        :command->response[0][31:8]*/
+        for(index = 0; index < MMC_EXT_CSD_LEN_AS_WORD; index++)
         {
-            card->rawExt1.rawExtcsd[index] = swap_be32(card->rawExt1.rawExtcsd[index]);
+            card->rawExtCsd[index] = swap_be32(card->rawExtCsd[index]);
         }
-        EMMC_DecodeExtCsd(card->rawExt1.rawExtcsd, card);
-    #if defined BSP_FSL_SDHC_USING_DYNALLOC
-        OSA_MemFree(req);
-    #endif        
-        req = NULL;
-        return kStatus_SDHC_NoError;
+        MMC_DecodeExtCsd(card->rawExtCsd, card);
+        
+        return kStatus_Success;
     }
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return err;
+
+    return kStatus_SDMMC_SendCommandFailed;
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_GetHighSpeedFreq
- * Description: Get the frequence when card in high speed mode
+ * Function Name: MMC_GetHighSpeedFreqence
+ * Description: Gets the bus frequence when card in high speed mode
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_GetHighSpeedFreq(sdhc_card_t* card)
+static status_t MMC_GetHighSpeedFreqence(mmc_card_t *card)
 {
-    /* This field defines the type of the card. he only currently valid values \
+    assert(card);
+
+    /* This field defines the type of the card. The only currently valid values \
     for this field are 0x01 and 0x03. */
-    if(kHSAt26MHZ == RD_CARDTYPE_HSFREQ_26MHZ(card->ext1.mmcExtCsd))
+    if(kMMC_HighSpeedFreqAt26MHZ == RD_CARD_TYPE_HSFREQ_26MHZ(card->extCsd))
     {
-        card->caps  |= MMC_CARD_SUP_HS_26MHZ;
+        card->caps  |= MMC_CAPS_HIGH_SPEED_26MHZ;
     }
-    else if(kHSAt52MHZ == RD_CARDTYPE_HSFREQ_52MHZ(card->ext1.mmcExtCsd))
+    else if(kMMC_HighSpeedFreqAt52MHZ == RD_CARD_TYPE_HSFREQ_52MHZ(card->extCsd))
     {
-        card->caps  |= MMC_CARD_SUP_HS_52MHZ;
+        card->caps  |= MMC_CAPS_HIGH_SPEED_52MHZ;
     }
     else
     {
-        return kStatus_SDHC_SwitchHighSpeedFailed;
+        return kStatus_SDMMC_CardNotSupport;
     }
-    return kStatus_SDHC_NoError;
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_GetPowCls
- * Description: Get the power class of the card at specific bus width and 
+ * Function Name: MMC_GetPowerClass
+ * Description: Gets the power class of the card at specific bus width and 
  * specific voltage
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_GetPowCls(sdhc_card_t* card, uint8_t* getPowCls,
-                                           mmc_bus_width_t busWidth)
+static status_t MMC_GetPowerClass(mmc_card_t *card, uint8_t *powerClass, mmc_bus_width_t busWidth)
 {  
     uint8_t mask;  
     assert(card);
-    if(busWidth <= kMmcBusWidth1b)
+
+    if (kMMC_BusWidth1b == busWidth)
     {
-        return kStatus_SDHC_GetMMCPowClsError;
+        return kStatus_SDMMC_CardNotSupport;
     }    
-    if(kMmcBusWidth4b == busWidth)
+    if (kMMC_BusWidth4b == busWidth)
     {
-        mask = MMC_EXTCSD_PWRCLFFVV_4BUS_MASK;/* the mask of 4 bit bus width's power class*/
+        mask = MMC_EXT_CSD_PWRCLFFVV_4BIT_MASK;/* the mask of 4 bit bus width's power class*/
     }
     else
     {
-        mask = MMC_EXTCSD_PWRCLFFVV_8BUS_MASK; /* the mask of 8 bit bus width's power class*/  
+        mask = MMC_EXT_CSD_PWRCLFFVV_8BIT_MASK; /* the mask of 8 bit bus width's power class*/  
     }
-    if( DOES_MMC_CARD_SUP_HS_52MHZ(card) && (kVol170to195 == card->hostIntVol) )
+    if ( DOES_MMC_SUPPORT_HIGH_SPEED_52MHZ(card) && (kMMC_Volt170to195 == card->hostVoltRange) )
     {
-        *getPowCls = ((card->ext1.mmcExtCsd.PWR_CL_52_195)&mask);
+        *powerClass = ((card->extCsd.PWR_CL_52_195) & mask);
     }
-    else if(DOES_MMC_CARD_SUP_HS_52MHZ(card) && (kVol270to360 == card->hostIntVol))
+    else if(DOES_MMC_SUPPORT_HIGH_SPEED_52MHZ(card) && (kMMC_Volt270to360 == card->hostVoltRange))
     {
-        *getPowCls = ((card->ext1.mmcExtCsd.PWR_CL_52_360)&mask);
+        *powerClass = ((card->extCsd.PWR_CL_52_360) & mask);
     }
-    else if(DOES_MMC_CARD_SUP_HS_26MHZ(card) && (kVol170to195 == card->hostIntVol))
+    else if(DOES_MMC_SUPPORT_HIGH_SPEED_26MHZ(card) && (kMMC_Volt170to195 == card->hostVoltRange))
     {
         /* 8 bit at 26MHZ/195V*/
-        *getPowCls = ((card->ext1.mmcExtCsd.PWR_CL_26_195)&mask);
+        *powerClass = ((card->extCsd.PWR_CL_26_195) & mask);
     }
-    else if(DOES_MMC_CARD_SUP_HS_26MHZ(card) && (kVol270to360 == card->hostIntVol))
+    else if(DOES_MMC_SUPPORT_HIGH_SPEED_26MHZ(card) && (kMMC_Volt270to360 == card->hostVoltRange))
     {
         /* 8 bit at 26MHZ/360V*/
-        *getPowCls = ((card->ext1.mmcExtCsd.PWR_CL_26_360)&mask);
+        *powerClass = ((card->extCsd.PWR_CL_26_360) & mask);
     }
     else
     {
         //have some error
-        return kStatus_SDHC_GetMMCPowClsError;
+        return kStatus_Fail;
     }
-    return kStatus_SDHC_NoError;
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_SendTestPattern
- * Description: Send test pattern to get the functional pin in the MMC bus
+ * Function Name: MMC_SendTestPattern
+ * Description: Sends test pattern to get the functional pin in the MMC bus
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_SendTestPattern(sdhc_card_t* card, 
-                                                 uint32_t blockSize, uint32_t* buffer)
+static status_t MMC_SendTestPattern(mmc_card_t *card, uint32_t blockSize, uint32_t *buffer)
 {
-    sdhc_request_t *req = 0;
+    sdhc_host_t *host;
+    sdhc_cmd_t command = {0};
     sdhc_data_t data = {0};
-#if ! defined BSP_FSL_SDHC_USING_DYNALLOC
-    sdhc_request_t request = {0};
-    req = &request;
-#endif
     assert(card);
-    assert(blockSize <= FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE);
+    assert(card->host);
+    assert(blockSize <= FSL_CARD_DEFAULT_BLOCK_SIZE);
     assert(buffer);
+
+    host = card->host;
     
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    req = (sdhc_request_t *)OSA_MemAllocZero(sizeof(sdhc_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDHC_OutOfMemory;
+    command.index = kSDMMC_SendTuningBlock;
+    command.argument = 0;
+    command.responseType = kSDHC_ReponseTypeR1;
+
+    data.blockCount = 1;
+    data.blockSize = blockSize;
+    data.buffer = buffer;
+
+    host->currentCmd = &command;
+    host->currentData = &data;
+
+    if ((kStatus_Success == SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+        || (!SDMMC_R1_ERROR_BITS(command->response[0]))
+        || (kStatus_Success != SDHC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))  
+    {     
+        return kStatus_SDMMC_SendCommandFailed;
     }
-#endif
-    req->cmdIndex = kSendTuningBlock;
-    req->argument = 0;
-    req->respType = kSdhcRespTypeR1;
-    req->data     = &data;
+
+    return kStatus_Success;
+}
+
+/*FUNCTION****************************************************************
+ *
+ * Function Name: MMC_GetTestPattern
+ * Description: Gets test pattern reversed by the card after the send-test-pattern
+ * commandMemory
+ *
+ *END*********************************************************************/
+static status_t MMC_GetTestPattern(mmc_card_t *card, uint32_t blockSize, uint32_t *buffer)
+{
+    sdhc_host_t *host;
+    sdhc_cmd_t command = {0};
+    sdhc_data_t data = {0};
+    assert(card);
+    assert(card->host);
+    assert(blockSize <= FSL_CARD_DEFAULT_BLOCK_SIZE);
+    assert(buffer);
+
+    host = card->host;
+    
+    command.index = kMMC_BusTestRead;
+    command.responseType = kSDHC_ReponseTypeR1;
+
     data.blockCount = 1;
     data.blockSize  = blockSize;
     data.buffer     = buffer;
-    data.req        = req;
-    if(kStatus_SDHC_NoError != SDHC_DRV_IssueRequestBlocking(card->host->instance,
-                                        req,
-                                        FSL_MMC_REQUEST_TIMEOUT))    
-    {   
-    #if defined BSP_FSL_SDHC_USING_DYNALLOC
-        OSA_MemFree(req);
-    #endif        
-        req = NULL;
-        return kStatus_SDHC_BusTestProcFailed;
+    data.flags |= CARD_DATA_FLAGS_DATA_READ;
+
+    host->currentCmd = &command;
+    host->currentData = &data;
+
+    if ((kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+        || (!SDMMC_R1_ERROR_BITS(command->response[0]))
+        || (kStatus_Success != SDHC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))  
+    {         
+        return kStatus_SDMMC_SendCommandFailed;
     }
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return kStatus_SDHC_NoError;
+
+    return kStatus_Success;   
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_GetTestPattern
- * Description: Get test pattern reversed by the card after the send-test-pattern
- * command
- *
- *END*********************************************************************/
-static sdhc_status_t EMMC_GetTestPattern(sdhc_card_t* card, uint32_t blockSize, uint32_t* buffer)
-{
-    sdhc_request_t *req = 0;
-    sdhc_data_t data = {0};
-#if ! defined BSP_FSL_SDHC_USING_DYNALLOC
-    sdhc_request_t request = {0};
-    req = &request;
-#endif
-    assert(card);
-    assert(blockSize <= FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE);
-    assert(buffer);
-    
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    req = (sdhc_request_t *)OSA_MemAllocZero(sizeof(sdhc_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDHC_OutOfMemory;
-    }
-#endif
-    req->cmdIndex = kMmcBusTestRead;
-    req->respType = kSdhcRespTypeR1;
-    req->flags    = FSL_SDHC_REQ_FLAGS_DATA_READ;
-    req->data     = &data;
-    data.blockCount = 1;
-    data.blockSize  = blockSize;
-    data.buffer     = buffer;
-    data.req        = req;
-    if(kStatus_SDHC_NoError != SDHC_DRV_IssueRequestBlocking(card->host->instance,
-                                        req,
-                                        FSL_MMC_REQUEST_TIMEOUT))    
-    {   
-    #if defined BSP_FSL_SDHC_USING_DYNALLOC
-        OSA_MemFree(req);
-    #endif        
-        req = NULL;
-        return kStatus_SDHC_BusTestProcFailed;
-    }
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return kStatus_SDHC_NoError;   
-}
-
-/*FUNCTION****************************************************************
- *
- * Function Name: EMMC_BusTestProc
+ * Function Name: MMC_BusTestProc
  * Description: Bus test procedure to get the functional pin in the bus
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_BusTestProc(sdhc_card_t* card, mmc_bus_width_t busWidth)
+static status_t MMC_BusTestProc(mmc_card_t *card, mmc_bus_width_t busWidth)
 {
     uint32_t blockSize;
-    uint32_t sendPattern[kMmcBusWidth8b];
-    uint32_t recvPattern[kMmcBusWidth8b];
-    bool testRes = false; /* Test procedure not passed*/
+    uint32_t sendPattern[kMMC_BusWidth8b];
+    uint32_t recvPattern[kMMC_BusWidth8b];
+    bool testPass = false; /* Test procedure not passed*/
     assert(card);
-    assert(busWidth <= kMmcBusWidth8b);
+    assert(busWidth <= kMMC_BusWidth8b);
     
     /* For 8 data lines the data block would be (MSB to LSB): 0x0000_0000_0000_AA55,
     For 4 data lines the data block would be (MSB to LSB): 0x0000_005A, 
     For only 1 data line the data block would be: 0x80*/
-    if(kMmcBusWidth8b == busWidth)
+    if(kMMC_BusWidth8b == busWidth)
     {
-        blockSize  = kMmcBusWidth8b;
-        sendPattern[0]  = MMC_TEST_PATTERN_8BIT_BUS;
+        blockSize  = 8;
+        sendPattern[0]  = MMC_8BIT_BUS_TEST_PATTERN;
         sendPattern[1]  = 0;        
     }
-    else if(kMmcBusWidth4b == busWidth)
+    else if(kMMC_BusWidth4b == busWidth)
     {
-        blockSize  = kMmcBusWidth4b;
-        sendPattern[0]  = MMC_TEST_PATTERN_4BIT_BUS;
+        blockSize  = 4;
+        sendPattern[0]  = MMC_4BIT_BUS_TEST_PATTERN;
     }
     else
     {
-        blockSize  = kMmcBusWidth1b;
-        sendPattern[0]  = MMC_TEST_PATTERN_1BIT_BUS;
+        blockSize  = 1;
+        sendPattern[0]  = MMC_1BIT_BUS_TEST_PATTERN;
     }
-    if(kStatus_SDHC_NoError != EMMC_SendTestPattern(card, blockSize, sendPattern))
+    if(kStatus_Success != MMC_SendTestPattern(card, blockSize, sendPattern))
     {
-        return kStatus_SDHC_BusTestProcFailed;
+        return kStatus_Fail;
     }
-    if(kStatus_SDHC_NoError != EMMC_GetTestPattern(card, blockSize, recvPattern))
+    if(kStatus_Success != MMC_GetTestPattern(card, blockSize, recvPattern))
     {
-        return kStatus_SDHC_BusTestProcFailed;
+        return kStatus_Fail;
     }
     /* XOR the send pattern and recv pattern */
-    if(kMmcBusWidth8b == busWidth)
+    if(kMMC_BusWidth8b == busWidth)
     {
-        if( (sendPattern[0]^recvPattern[0]) == MMC_PATTERN_XOR_RES_8BIT_BUS )
+        if( (sendPattern[0]^recvPattern[0]) == MMC_8BIT_BUS_PATTERN_XOR_RESULT )
         {
-            testRes = true; /* Test procedure passed */
+            testPass = true; /* Test procedure passed */
         }
     }
-    else if(kMmcBusWidth4b == busWidth)
+    else if(kMMC_BusWidth4b == busWidth)
     {
-        if( (sendPattern[0]^recvPattern[0]) == MMC_PATTERN_XOR_RES_4BIT_BUS )
+        if( (sendPattern[0]^recvPattern[0]) == MMC_4BIT_BUS_PATTERN_XOR_RESULT )
         {
-            testRes = true; /* Test procedure passed */
+            testPass = true; /* Test procedure passed */
         }
     }
-    else if(kMmcBusWidth1b == busWidth)
+    else if(kMMC_BusWidth1b == busWidth)
     {
-        if( (sendPattern[0]^recvPattern[0]) == MMC_PATTERN_XOR_RES_1BIT_BUS )
+        if( (sendPattern[0]^recvPattern[0]) == MMC_1BIT_BUS_PATTERN_XOR_RESULT )
         {
-            testRes = true; /* Test procedure passed */
+            testPass = true; /* Test procedure passed */
         }
     }
-    if(!testRes)
+    if(!testPass)
     {
-        return kStatus_SDHC_BusTestProcFailed;
+        return kStatus_SDMMC_BusTestProcessFailed;
     }
-    return kStatus_SDHC_NoError;    
+    return kStatus_Success;    
 }
 
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_SetBusWidth
- * Description: Set the bus width.
+ * Function Name: MMC_SetBusWidth
+ * Description: Sets the bus width.
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_SetBusWidth(sdhc_card_t* card, 
-                                             mmc_bus_width_t busWidth)
+static status_t MMC_SetBusWidth(mmc_card_t *card, mmc_bus_width_t busWidth)
 {    
-    uint8_t powClsAt8bit;
-    mmc_extcsd_op_t extOp;
+    uint8_t powerClassAt8bit;
+    mmc_ext_csd_operation_t extCsdOperation;
     assert(card);
-    if(kStatus_SDHC_NoError != 
-       EMMC_GetPowCls(card, &powClsAt8bit, busWidth))
+
+    if(kStatus_Success != MMC_GetPowerClass(card, &powerClassAt8bit, busWidth))
     {
-        return kStatus_SDHC_GetMMCPowClsError;
+        return kStatus_SDMMC_GetPowerClassFailed;
     } 
+
     /* Set power class of pointed bus width */
-    extOp.accMode     = kWriteBits;
-    extOp.indexOfByte = POWER_CLASS_INDEX;
-    extOp.value       = powClsAt8bit;
-    if(kStatus_SDHC_NoError != EMMC_FillExtCsdByte(card, &extOp))
+    extCsdOperation.accessMode = kMMC_ExtCsdWriteBits;
+    extCsdOperation.indexOfByte = MMC_EXT_CSD_POWER_CLASS_INDEX;
+    extCsdOperation.value = powerClassAt8bit;
+    if(kStatus_Success != MMC_SetExtCsdByte(card, &extCsdOperation))
     {
-        return kStatus_SDHC_SetPowClsError;
+        return kStatus_SDMMC_SetPowerClassFailed;
     }          
+
     /* Set bus width of pointed bus width */
-    extOp.accMode     = kWriteBits;
-    extOp.indexOfByte = BUS_WIDTH_INDEX;
-    extOp.value       = busWidth;      
-    if(kStatus_SDHC_NoError != EMMC_FillExtCsdByte(card, &extOp))
+    extCsdOperation.accessMode = kMMC_ExtCsdWriteBits;
+    extCsdOperation.indexOfByte = MMC_EXT_CSD_BUS_WIDTH_INDEX;
+    extCsdOperation.value = busWidth;      
+    if(kStatus_Success != MMC_SetExtCsdByte(card, &extCsdOperation))
     {
-        return kStatus_SDHC_SetBusWidthFailed;
+        return kStatus_SDMMC_SetBusWidthFailed;
     }    
-    return kStatus_SDHC_NoError;    
+    return kStatus_Success;    
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_SwitchHighSpeed
- * Description: Switch the card to high speed mode
+ * Function Name: MMC_SwitchHighSpeed
+ * Description: Switches the card to high speed mode
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_SwitchHighSpeed(sdhc_card_t* card)
+static status_t MMC_SwitchHighSpeed(mmc_card_t *card)
 {    
-    mmc_extcsd_op_t extOp;    
+    mmc_ext_csd_operation_t extCsdOperation; 
+    sdhc_sd_clock_config_t sdClockConfig = {0};   
     assert(card);
    
     /* If host support high speed mode, then switch to high speed. */
-    if (DOES_HOST_SUPPORT_HIGHSPEED(card->host))
+    if (DOES_SDHC_SUPPORT_HIGHSPEED(card->host))
     {       
         /* Switch to high speed timing */
-        extOp.accMode     = kWriteBits;
-        extOp.indexOfByte = HS_TIMING_INDEX;
-        extOp.value       = kMmcHSTiming;
-        if(kStatus_SDHC_NoError != EMMC_FillExtCsdByte(card, &extOp))
+        extCsdOperation.accessMode = kMMC_ExtCsdWriteBits;
+        extCsdOperation.indexOfByte = MMC_EXT_CSD_HS_TIMING_INDEX;
+        extCsdOperation.value = kMMC_HighSpeedTiming;
+        if(kStatus_Success != MMC_SetExtCsdByte(card, &extCsdOperation))
         {
-            return kStatus_SDHC_SwitchHighSpeedFailed;
+            return kStatus_Fail;
         }   
-        if(kStatus_SDHC_NoError != EMMC_GetHighSpeedFreq(card))
+        if(kStatus_Success != MMC_GetHighSpeedFreqence(card))
         {
-            return kStatus_SDHC_SwitchHighSpeedFailed;
+            return kStatus_Fail;
         }
-        /* Switch to corresponding frequence in high speed mode  */
-        if(DOES_MMC_CARD_SUP_HS_52MHZ(card))
+        /* Switch to corresponding fsdhcCmduence in high speed mode  */
+        if(DOES_MMC_SUPPORT_HIGH_SPEED_52MHZ(card))
         {
-            if (kStatus_SDHC_NoError !=
-                    SDHC_DRV_ConfigClock(card->host->instance, MMC_CLK_52MHZ))
-            {
-                return kStatus_SDHC_SetClockFailed;
-            }
+            sdClockConfig.enableSdClock = true;
+            sdClockConfig.baseClockFreq = host->capability->sourceClockFreq;
+            sdClockConfig.sdClockFreq = MMC_CLK_52MHZ;    
+            SDHC_SetSdClockConfig(host->base, &sdClockConfig);
         }
-        else if(DOES_MMC_CARD_SUP_HS_26MHZ(card))
+        else if(DOES_MMC_SUPPORT_HIGH_SPEED_26MHZ(card))
         {
-             if (kStatus_SDHC_NoError !=
-                    SDHC_DRV_ConfigClock(card->host->instance, MMC_CLK_26MHZ))
-            {
-                return kStatus_SDHC_SetClockFailed;
-            } 
+            sdClockConfig.enableSdClock = true;
+            sdClockConfig.baseClockFreq = host->capability->sourceClockFreq;
+            sdClockConfig.sdClockFreq = MMC_CLK_26MHZ;    
+            SDHC_SetSdClockConfig(host->base, &sdClockConfig);
         }
         else
         {
-            return kStatus_SDHC_SetClockFailed;
+            return kStatus_Fail;
         }
     }
-    return kStatus_SDHC_NoError;    
+    return kStatus_Success;    
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_DecodeCid
- * Description: decode cid register
+ * Function Name: MMC_DecodeCid
+ * Description: Decodes cid register
  *
  *END*********************************************************************/
-static void EMMC_DecodeCid(uint32_t *rawCid, sdhc_card_t *card)
+static void MMC_DecodeCid(uint32_t *rawCid, mmc_card_t *card)
 {
-    mmccard_cid_t *cid;
+    mmc_cid_t *cid;
     assert(rawCid);
     assert(card);
-    cid = &(card->cid.mmcCid);
+    cid = &(card->cid);
 
     cid->mid           = (uint8_t)((rawCid[3] & 0xFF000000) >> 24);
 
@@ -1350,843 +1001,609 @@ static void EMMC_DecodeCid(uint32_t *rawCid, sdhc_card_t *card)
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_AutoSetWidth
- * Description: Set the bus width automatically
+ * Function Name: MMC_AutoSetBusWidth
+ * Description: Sets the bus width automatically
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_AutoSetWidth(sdhc_card_t *card)
+static status_t MMC_AutoSetBusWidth(mmc_card_t *card)
 {
     uint8_t i;
-    mmc_bus_width_t maxBusWidth, busWidth[] = {kMmcBusWidth1b, kMmcBusWidth4b, kMmcBusWidth8b};
+    mmc_bus_width_t maxBusWidth, busWidth[] = {kMMC_BusWidth1b, kMMC_BusWidth4b, kMMC_BusWidth8b};
     assert(card);
     
-    /* Get max width data bus */
-    for(i = 0; i < MMC_BUSWIDTH_TYPE_NUM; i++)
+    /* Get max width of data bus */
+    for(i = 0; i < MMC_BUS_WIDTH_TYPE_NUM; i++)
     {
-        if(kStatus_SDHC_NoError == EMMC_BusTestProc(card, busWidth[i]))
+        if(kStatus_Success == MMC_BusTestProc(card, busWidth[i]))
         {
             maxBusWidth = busWidth[i];
             break;
         } 
     }
-    if(i == MMC_BUSWIDTH_TYPE_NUM)/* Board haven't functional pin. */
+    if(i == MMC_BUS_WIDTH_TYPE_NUM)/* Board haven't functional pin. */
     {
-        return kStatus_SDHC_SetBusWidthFailed;
+        return kStatus_SDMMC_BusTestProcessFailed;
     }
-     /* From the EXT_CSD the host can learn the power class of the card,
-and choose to work with a wider data bus */
-    if(kStatus_SDHC_NoError != EMMC_SetBusWidth(card, maxBusWidth))
-    {
-        return kStatus_SDHC_SetBusWidthFailed;
-    }
-    if((kMmcBusWidth4b == maxBusWidth)&&DOES_HOST_SUPPORT_4BITS(card->host))
-    {
-        if (kStatus_SDHC_NoError != SDHC_DRV_SetBusWidth(card->hostInstance, kSdhcBusWidth4Bit))
-        {
-            return kStatus_SDHC_SetBusWidthFailed;
-        }
-    }               
-    else if((kMmcBusWidth8b == maxBusWidth)&&DOES_HOST_SUPPORT_8BITS(card->host))
-    {
-        if (kStatus_SDHC_NoError != SDHC_DRV_SetBusWidth(card->hostInstance, kSdhcBusWidth8Bit))
-        {
-            return kStatus_SDHC_SetBusWidthFailed;
-        }
-    }
-    return kStatus_SDHC_NoError;
-}
 
+     /* From the EXT_CSD the host can learn the power class of the card, and choose to work with a wider data bus */
+    if(kStatus_Success != MMC_SetBusWidth(card, maxBusWidth))
+    {
+        return kStatus_SDMMC_SetBusWidthFailed;
+    }
+    if((kMMC_BusWidth4b == maxBusWidth) && DOES_SDHC_SUPPORT_4BITS(card->host))
+    {
+        SDHC_SetDataTransferWidth(card->host->base, kSDHCDtw4Bit);
+    }               
+    else if((kMMC_BusWidth8b == maxBusWidth) && DOES_SDHC_SUPPORT_8BITS(card->host))
+    {
+        SDHC_SetDataTransferWidth(card->host->base, kSDHCDtw8Bit);
+    }
+    return kStatus_Success;
+}
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_Init
- * Description: Initialize the MMCCARD
+ * Function Name: MMC_AllSendCid
+ * Description: Sends all_send_cid commandMemory
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_Init(sdhc_card_t *card)
+static status_t MMC_AllSendCid(mmc_card_t *card)
 {
-    sdhc_status_t bootRes;
+    sdhc_cmd_t command = {0};
+    sdhc_data_t data = {0};
+    sdhc_host_t *host; 
+    assert(card);
+    assert(card->host);
+
+    host = card->host;
+
+    command.index = kSDMMC_AllSendCid;
+    command.argument = 0;
+    command.responseType = kSDHC_ReponseTypeR2;
+
+    host->currentCmd = &command;
+    host->currentData = &data;
+
+    if (kStatus_Success == SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+    {
+        memcpy(card->rawCid, command->response, sizeof(card->rawCid));
+        MMC_DecodeCid(command->response, card);    
+ 
+        return kStatus_Success;
+    }
+ 
+    return kStatus_Fail;
+}
+
+/*FUNCTION****************************************************************
+ *
+ * Function Name: MMC_SendCsd
+ * Description: get csd from card
+ *
+ *END*********************************************************************/
+static status_t MMC_SendCsd(mmc_card_t *card)
+{
+    sdhc_cmd_t command = {0};
+    sdhc_data_t *data = {0};
+    sdhc_host_t *host;
+    assert(card);
+    assert(card->host);
+
+    host = card->host;
+
+    command.index = kSDMMC_SendCsd;
+    command.argument = card->rca << 16;
+    command.responseType = kSDHC_ReponseTypeR2;
+    
+    host->currentCmd = &command;
+    host->currentData = data;
+
+    if (kStatus_Success == SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+    {
+        memcpy(card->rawCsd, command->response, sizeof(card->rawCsd));
+        /*The response is from bit 127:8 in R2, corrisponding to command->response[3]:command->response[0][31:8]*/
+        MMC_DecodeCsd(command->response, card);
+
+        return kStatus_Success;
+    }
+
+    return kStatus_Fail;
+}
+
+/*FUNCTION****************************************************************
+ *
+ * Function Name: MMC_Init
+ * Description: Initializes the MMCCARD
+ *
+ *END*********************************************************************/
+status_t MMC_Init(mmc_card_t *card)
+{
+    status_t bootRes;
+    sdhc_sd_clock_config_t sdClockConfig = {0};
     assert(card);
     
     /* Set clock to 400KHz, or less */
-    if (SDHC_DRV_ConfigClock(card->host->instance, SDMMC_CLK_400KHZ))
-    {
-        return kStatus_SDHC_SetClockFailed;
-    }
+    sdClockConfig.enableSdClock = true;
+    sdClockConfig.baseClockFreq = host->capability->sourceClockFreq;
+    sdClockConfig.sdClockFreq = SDMMC_CLK_400KHZ;    
+    SDHC_SetSdClockConfig(host->base, &sdClockConfig);
     
     /* Send CMD0 to reset the bus */
-    if(kStatus_SDHC_NoError != SDEMMC_GoIdle(card))
+    if(kStatus_Success != MMC_GoIdle(card))
     {
-        return kStatus_SDHC_SetCardToIdle;
+        return kStatus_SDMMC_GoIdleFailed;
     }
+
     /* Apply power to the bus, communication voltage range (2.7-3.6V) */
     /* Validate the voltage range */
-    if(kStatus_SDHC_NoError != EMMC_VolValid(card, kVol270to360))
+    if(kStatus_Success != MMC_ValidateVolt(card, kMMC_Volt270to360))
     {
-        return kStatus_SDHC_SendAppOpCondFailed;
+        return kStatus_SDMMC_SendOpCondFailed;
     }
+
     /* Get card CID */
-    if(kStatus_SDHC_NoError != SDEMMC_AllSendCid(card))
+    if(kStatus_Success != MMC_AllSendCid(card))
     {
-        return kStatus_SDHC_AllSendCidFailed;
+        return kStatus_SDMMC_AllSendCidFailed;
     }
+
     /* Set the card address */
-    if(kStatus_SDHC_NoError != EMMC_SetRelAddr(card))
+    if(kStatus_Success != MMC_SetRelativeAddress(card))
     {
-        return kStatus_SDHC_SendRcaFailed;
+        return kStatus_SDMMC_SendRcaFailed;
     }
+
     /* Get the CSD register content */
-    if(kStatus_SDHC_NoError != SD_SendCsd(card))
+    if(kStatus_Success != MMC_SendCsd(card))
     {
-        return kStatus_SDHC_SendCsdFailed;
+        return kStatus_SDMMC_SendCsdFailed;
     }
+
     /* If necessary, adjust the host parameters according to the information in the CSD */
-    if(card->csd.mmcCsd.sysSpecVer == 4)
+    if(card->csd.sysSpecVer == 4)
     {
-        card->caps |= SDMMC_CARD_CAPS_HIGHSPEED;
-        card->caps |= MMC_CARD_SUPPORT_EXT_CSD;
+        card->caps |= MMC_CAPS_HIGH_SPEED;
+        card->caps |= MMC_CAPS_EXT_CSD;
     }
     else
     {
         /* Card is old MMC card */
-        return kStatus_SDHC_OldMmcCard;
+        return kStatus_SDMMC_CardNotSupport;
     }
-    /* Send CMD7 with the card¡¯s RCA to place the card in tran state */
-    /* Puts current selected card in trans state */
-    if(kStatus_SDHC_NoError != SDEMMC_SelectCard(card, true))
+
+    /* Send CMD7 with the card's RCA to place the card in tran state. Puts current selected card in trans state */
+    if(kStatus_Success != MMC_SelectCard(card, true))
     {
-        return kStatus_SDHC_SelectCardFailed;
+        return kStatus_SDMMC_SelectCardFailed;
     }
+
     /* Get EXT_CSD register content */
-    if(kStatus_SDHC_NoError != EMMC_SendExtCsd(card))
+    if(kStatus_Success != MMC_SendExtCsd(card))
     {
-        return kStatus_SDHC_SendExtCsdFailed;
+        return kStatus_SDMMC_SendExtCsdFailed;
     }    
-    if(kStatus_SDHC_NoError != EMMC_AutoSetWidth(card))/* Sets card data width and block size  */
+
+    if(kStatus_Success != MMC_AutoSetBusWidth(card))/* Sets card data width and block size  */
     {
-        return kStatus_SDHC_SetBusWidthFailed;
+        return kStatus_SDMMC_SetBusWidthFailed;
     }
+
     /* Switch to high speed mode */  
-    if(kStatus_SDHC_NoError != EMMC_SwitchHighSpeed(card))
+    if(kStatus_Success != MMC_SwitchHighSpeed(card))
     {
-        return kStatus_SDHC_SwitchHighSpeedFailed;
+        return kStatus_SDMMC_SwitchHighSpeedFailed;
     }
-    if (SDEMMC_SetBlockSize(card, FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE))
+
+    if (MMC_SetBlockSize(card, FSL_CARD_DEFAULT_BLOCK_SIZE))
     {
-        return kStatus_SDHC_SetCardBlockSizeFailed;
+        return kStatus_SDMMC_SetCardBlockSizeFailed;
     }
+
     /* Set default access non-boot partition */
-    card->curAccPart = kAccBootPartNot;
-    card type = mmc
-    return kStatus_SDHC_NoError;
+    card->currentPartition = kMMC_AccessBootPartitionNot;
+    return kStatus_Success;
 }
 
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_Erase
- * Description:  Erase the MMC card content
+ * Function Name: MMC_Erase
+ * Description:  Erases the MMC card content
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_Erase(sdhc_card_t* card, uint32_t ersGrpStart, 
-                                uint32_t grpCount)
+static status_t MMC_Erase(mmc_card_t *card, uint32_t eraseGroupStart, uint32_t groupCount)
 {
     uint32_t s, e;
-    sdhc_request_t *req = 0;
+    sdhc_cmd_t command = {0};
     assert(card);
-    assert(grpCount);    
-    /*Assert not to pass the device capacity*/
-    assert(ersGrpStart < (ersGrpStart + grpCount));
-    assert((ersGrpStart + grpCount - 1) <= (card->mmcErsGrpCnt));  
-    /* Assert the start address must be group address */
-    if((ersGrpStart+1)%(card->mmcErsGrpSizeAsBlk*FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE) != 0)
-    {
-        return kStatus_SDHC_AddrNotGrp;
-    }
-    switch(card->curAccPart)
-    {
-    case kAccBootPartNot:
-      {
-          if((ersGrpStart < (ersGrpStart + grpCount)) \
-            || ((ersGrpStart + grpCount - 1) <= (card->mmcErsGrpCnt)))
-          {
-              return kStatus_SDHC_AddrNotGrp;
-          }
-          break;
-      }
-    case kAccBootPart1:
-    case kAccBootPart2:
-      {
-          /* Check if the erase request data size is more than boot partition size */
-          if(((ersGrpStart + grpCount - 1)*(card->mmcErsGrpSizeAsBlk))*FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE\
-                     > (card->bootPartSizeAsByte))
-          {
-              return kStatus_SDHC_InvalidIORange;
-          }
-          break;
-      }
-    }
-    
-#if ! defined BSP_FSL_SDHC_USING_DYNALLOC
-    sdhc_request_t request = {0};
-    req = &request;
-#endif
+    assert(card->host);
+    assert(groupCount);    
 
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    req = (sdhc_request_t *)OSA_MemAllocZero(sizeof(sdhc_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDHC_OutOfMemory;
-    }
-#endif
+    host = card->host;
+
     /* Calculate the start group number and end group number */
-    s = ersGrpStart;
-    e = s + grpCount - 1;
-    if(DOES_CARD_SUPPORT_HIGHCAPACITY(card))
+    s = eraseGroupStart;
+    e = s + groupCount - 1;
+    if(IS_MMC_HIGH_CAPACITY(card))
     {
         /* The implementation of a higher than 2GB of density of memory will not
       be backwards compatible with the lower densities.First of all the address 
       argument for higher than 2GB of density of memory is changed to be sector 
       address (512B sectors) instead of byte address */
-        s = (s * (card->mmcErsGrpSizeAsBlk));
-        e = (e * (card->mmcErsGrpSizeAsBlk));
+        s = (s * (card->eraseGroupSize));
+        e = (e * (card->eraseGroupSize));
     }
     else
     {
         /* The address unit is byte when card capacity is lower than 2GB*/
-        s = (s * (card->mmcErsGrpSizeAsBlk)*FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE);
-        e = (e * (card->mmcErsGrpSizeAsBlk)*FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE);
+        s = (s * (card->eraseGroupSize)*FSL_CARD_DEFAULT_BLOCK_SIZE);
+        e = (e * (card->eraseGroupSize)*FSL_CARD_DEFAULT_BLOCK_SIZE);
     }
+
     /* Set the start erase group address */         
-    req->cmdIndex = kMmcEraseGroupStart;
-    req->argument = s;
-    req->respType = kSdhcRespTypeR1;
-    if (kStatus_SDHC_NoError !=
-            SDHC_DRV_IssueRequestBlocking(card->host->instance,
-                                          req,
-                                          FSL_MMC_REQUEST_TIMEOUT))
-    {
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return kStatus_SDHC_RequestFailed;
+    command.index = kMMC_EraseGroupStart;
+    command.argument = s;
+    command.responseType = kSDHC_ReponseTypeR1;
+
+    host->currentCmd = &command;
+    host->currentData = 0;
+
+    if ((kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)) 
+        || (!SDMMC_R1_ERROR_BITS(command->response[0])))
+    { 
+        return kStatus_Fail;
     }
+
     /* Set the end erase group address */
-    req->cmdIndex = kMmcEraseGroupEnd;
-    req->argument = e;
-    if (kStatus_SDHC_NoError !=
-            SDHC_DRV_IssueRequestBlocking(card->host->instance,
-                                          req,
-                                          FSL_MMC_REQUEST_TIMEOUT))
+    command.index = kMMC_EraseGroupEnd;
+    command.argument = e;
+
+    host->currentCmd = &command;
+    host->currentData = 0;
+
+    if ((kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+        || (!SDMMC_R1_ERROR_BITS(command->response[0])))
     {
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return kStatus_SDHC_RequestFailed;
+        return kStatus_Fail;
     }
+
     /* Start the erase process */
-    req->cmdIndex = kErase;
-    req->argument = 0;
-    req->respType = kSdhcRespTypeR1b;
-    if (kStatus_SDHC_NoError !=
-            SDHC_DRV_IssueRequestBlocking(card->host->instance,
-                                          req,
-                                          FSL_MMC_REQUEST_TIMEOUT))
+    command.index = kSDMMC_Erase;
+    command.argument = 0;
+    command.responseType = kSDHC_ReponseTypeR1b;
+
+    host->currentCmd = &command;
+    host->currentData = 0;
+
+    if ((kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)) 
+        || (!SDMMC_R1_ERROR_BITS(command->response[0])))
     {
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return kStatus_SDHC_RequestFailed;
+        return kStatus_Fail;
     }
 
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
     /* Wait the write and program process complete in the card */
-    if (kStatus_SDHC_NoError != SDEMMC_SendStatus(card))
+    if (kStatus_Success != MMC_SendStatus(card))
     {
-        return kStatus_SDHC_SendCardStatusFailed;
+        return kStatus_SDMMC_SendStatusFailed;
     }
-    return kStatus_SDHC_NoError;
+
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_SelPart
- * Description:  Select the partition used to read/write data after initilized 
+ * Function Name: MMC_SelectPartition
+ * Description:  Selects the partition used to read/write data after initilized 
  *
  *END*********************************************************************/
-sdhc_status_t EMMC_SelPart(sdhc_card_t* card, mmc_acc_part_t partNum)
+status_t MMC_SelectPartition(mmc_card_t *card, mmc_access_partition_t partitionNumber)
 {
-    mmc_extcsd_op_t extOp;
-    assert(card);
-    assert(kCardTypeMmc == card->cardType);
+    mmc_ext_csd_operation_t extCsdOperation;
     uint8_t bootConfig;
-    bootConfig  = card->ext1.mmcExtCsd.bootConfig;
-    bootConfig |= (partNum << BOOT_PARTITION_ACCESS_POS);
-    extOp.accMode     = kWriteBits;
-    extOp.indexOfByte = BOOT_CONFIG_INDEX;
-    extOp.value       = bootConfig;      
-    if(kStatus_SDHC_NoError != EMMC_FillExtCsdByte(card, &extOp))
+    assert(card);
+    
+    bootConfig  = card->extCsd.bootConfig;
+    bootConfig |= (partitionNumber << MMC_BOOT_CONFIG_BOOT_PARTITION_ACCESS_POS);
+    extCsdOperation.accessMode = kMMC_ExtCsdWriteBits;
+    extCsdOperation.indexOfByte = MMC_EXT_CSD_BOOT_CONFIG_INDEX;
+    extCsdOperation.value = bootConfig;      
+    if(kStatus_Success != MMC_SetExtCsdByte(card, &extCsdOperation))
     {
-        return kStatus_SDHC_ConfigBootFailed;
+        return kStatus_SDMMC_ConfigBootFailed;
     }
-    card->ext1.mmcExtCsd.bootConfig = bootConfig;   
+
+    card->extCsd.bootConfig = bootConfig;   
     /* Save current access partition number */
-    card->curAccPart = partNum;
-    return kStatus_SDHC_NoError;
+    card->currentPartition = partitionNumber;
+
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SDEMMC_ConfigBootPart
- * Description:  Configure boot activity after power on 
+ * Function Name: MMC_ConfigBoot
+ * Description:  Configures boot activity after power on 
  *
  *END*********************************************************************/
-sdhc_status_t EMMC_ConfPowOnBoot(sdhc_card_t* card, const mmcboot_user_config_t* bootConfig)
+status_t MMC_ConfigBoot(mmc_card_t *card, const mmc_boot_config_t *configPtr)
 {
     uint8_t bootParam;
-    mmc_extcsd_op_t extOp;
+    mmc_ext_csd_operation_t extCsdOperation;
     assert(card);
-    assert(kCardTypeMmc == card->cardType);
-    assert(bootConfig);
-    if(kCardTypeMmc != card->cardType)
+    assert(configPtr);
+
+    if(kMMC_ExtCsdVer13 != card->extCsd.extCsdVer)/* Only V4.3 support fast boot */
     {
-        return kStatus_SDHC_CardTypeError;
+        return kStatus_SDMMC_NotSupportYet;
     }
-    if(kextcsdVer13 != card->ext1.mmcExtCsd.extcsdVer)/* Only V4.3 support fast boot */
-    {
-        return kStatus_SDHC_NotSupportYet;
-    }
-    /* Nothing to set */
-    if(!(bootConfig->setFlags))
-    {
-        return kStatus_SDHC_InvalidParameter;
-    }
+
     /* Set the BOOT_CONFIG field of EXT_CSD */
-    bootParam = card->ext1.mmcExtCsd.bootConfig;
-    if( (bootConfig->setFlags) & BOOT_PARTITION_ENABLE_SET_FLAG)
-    {        
-        bootParam |= ((bootConfig->configMask & BOOT_PARTITION_ENABLE_MASK) >> BOOT_PARTITION_ENABLE_POS);
-    }
-    if(bootConfig->setFlags & BOOT_ACK_SET_FLAG)
+    bootParam = card->extCsd.bootConfig;
+
+    bootParam &= ~(MMC_BOOT_CONFIG_BOOT_ACK_MASK);
+    bootParam &= ~(MMC_BOOT_CONFIG_BOOT_PARTITION_ENABLE_MASK);
+    
+    bootParam |= ((configPtr->bootAckEnable ? 1 : 0) << MMC_BOOT_CONFIG_BOOT_ACK_POS);
+    bootParam |= ((configPtr->bootPartitionEnable) << MMC_BOOT_CONFIG_BOOT_PARTITION_ENABLE_POS);
+    
+    extCsdOperation.accessMode     = kMMC_ExtCsdWriteBits;
+    extCsdOperation.indexOfByte = MMC_EXT_CSD_BOOT_CONFIG_INDEX;
+    extCsdOperation.value       = bootParam;      
+    if(kStatus_Success != MMC_SetExtCsdByte(card, &extCsdOperation))
     {
-        bootParam |= ((bootConfig->configMask & BOOT_ACK_MASK) >> BOOT_ACK_POS);
-    }      
-    extOp.accMode     = kWriteBits;
-    extOp.indexOfByte = BOOT_CONFIG_INDEX;
-    extOp.value       = bootParam;      
-    if(kStatus_SDHC_NoError != EMMC_FillExtCsdByte(card, &extOp))
-    {
-        return kStatus_SDHC_ConfigBootFailed;
+        return kStatus_SDMMC_ConfigBootFailed;
     }    
-    card->ext1.mmcExtCsd.bootConfig = bootParam;
+
+    card->extCsd.bootConfig = bootParam;
+
     /*Set BOOT_BUS_WIDTH in EXT_CSD */
-    bootParam = card->ext1.mmcExtCsd.bootBusWidth;
-    if(bootConfig->setFlags & BOOT_BUS_WIDTH_SET_FLAG)
+    bootParam = card->extCsd.bootBusWidth;
+
+    bootParam &= ~(MMC_BOOT_BUS_WIDTH_RESET_MASK);
+    bootParam &= ~(MMC_BOOT_BUS_WIDTH_WIDTH_MASK);
+    
+    bootParam |= ((configPtr->retainBootBusWidth ? 1 : 0) << MMC_BOOT_BUS_WIDTH_RESET_POS);
+    bootParam |= (configPtr->bootBusWidth << MMC_BOOT_BUS_WIDTH_WIDTH_POS);  
+
+    extCsdOperation.accessMode = kMMC_ExtCsdWriteBits;
+    extCsdOperation.indexOfByte = MMC_EXT_CSD_BUS_WIDTH_INDEX;
+    extCsdOperation.value = bootParam;      
+    if(kStatus_Success != MMC_SetExtCsdByte(card, &extCsdOperation))
     {
-        bootParam |= ((bootConfig->configMask & BOOT_BUS_WIDTH_MASK) >> BOOT_BUS_WIDTH_POS);
-    }
-    if(bootConfig->setFlags & RESET_BOOT_BUS_WIDTH_SET_FLAG)
-    {
-        bootParam |= ((bootConfig->configMask & RESET_BOOT_BUS_WIDTH_MASK) >> RESET_BOOT_BUS_WIDTH_POS);
-    }
-    extOp.accMode     = kWriteBits;
-    extOp.indexOfByte = BOOT_BUS_WIDTH_INDEX;
-    extOp.value       = bootParam;      
-    if(kStatus_SDHC_NoError != EMMC_FillExtCsdByte(card, &extOp))
-    {
-        return kStatus_SDHC_ConfigBootFailed;
+        return kStatus_SDMMC_ConfigBootFailed;
     }     
-    card->ext1.mmcExtCsd.bootBusWidth = bootParam;
-    return kStatus_SDHC_NoError;
+
+    card->extCsd.bootBusWidth = bootParam;
+
+    return kStatus_Success;
 }
 
+static status_t MMC_CheckIORange(mmc_card_t *card, uint32_t startBlock, uint32_t blockCount)
+{
+    /* Check address range */
+    switch(card->currentPartition)
+    {
+    case kMMC_AccessBootPartitionNot:
+      {
+          if((startBlock + blockCount + 1) <= (card->blockCount))
+          {
+              return kStatus_Fail;
+          }
+          break;
+      }
+    case kMMC_AccessBootPartition1:
+    case kMMC_AccessBootPartition2:
+      {
+          /* Boot part1 and part2 have the same partition size */
+         if((startBlock+blockCount) > card->bootPartitionSize)
+         {
+             return kStatus_Fail;
+         }
+          break;
+      }
+    }
 
-
+    return kStatus_Success;
+}
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_Read
- * Description: read data from specific MMC card
+ * Function Name: MMC_Read
+ * Description: Reads data from specific MMC card
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_Read(sdhc_card_t *card,
-                                     uint8_t *buffer,
-                                     uint32_t startBlock,
-                                     uint32_t blockSize,
-                                     uint32_t blockCount)
+static status_t MMC_Read(mmc_card_t *card, uint8_t *buffer, uint32_t startBlock, uint32_t blockSize,
+                 uint32_t blockCount)
 {
-    sdhc_request_t *req = 0;
+    sdhc_cmd_t command = {0};
     sdhc_data_t data = {0};
-#if ! defined BSP_FSL_SDHC_USING_DYNALLOC
-    sdhc_request_t request = {0};
-    req = &request;
-#endif
-
+    sdhc_host_t *host;
     assert(card);
+    assert(card->host);
     assert(buffer);
     assert(blockCount);
     assert(blockSize);
-    assert(blockSize == FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE);
-    /* Check address range */
-    switch(card->curAccPart)
+    assert(blockSize == FSL_CARD_DEFAULT_BLOCK_SIZE);
+
+    host = card->host;
+
+    if ((IS_MMC_HIGH_CAPACITY(card) && (blockSize != 512)) || (blockSize > card->blockSize)
+         || (blockSize > card->host->capability->maxBlockLength) || (blockSize % 4))
     {
-    case kAccBootPartNot:
-      {
-         if ((IS_HIGHCAPACITY_CARD(card) && (blockSize != 512))
-             || (blockSize > card->blockSize)
-             || (blockSize > card->host->maxBlockSize)
-             || (blockSize % 4))
-         {
-             return kStatus_SDHC_BlockSizeNotSupportError;
-         }
-         break;
-      }
-    case kAccBootPart1:
-    case kAccBootPart2:
-      {
-         /* Boot part1 and part2 have the same partition size */
-         if(((startBlock+blockCount)*FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE) \
-                                 > card->bootPartSizeAsByte)
-         {
-             return kStatus_SDHC_BlockSizeNotSupportError;
-         }
-         break;
-      }
-      
+     return kStatus_SDMMC_CardNotSupport;
     }
     
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    req = (sdhc_request_t *)OSA_MemAllocZero(sizeof(sdhc_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDHC_OutOfMemory;
-    }
-#endif
-
     data.blockSize = blockSize;
     data.blockCount = blockCount;
     data.buffer = (uint32_t *)buffer;
+    data.flags |= CARD_DATA_FLAGS_DATA_READ;
 
-    req->data = &data;
-    req->cmdIndex = kReadMultipleBlock;
+    command.index = kSDMMC_ReadMultipleBlock;
     if (data.blockCount == 1)
     {
-        req->cmdIndex = kReadSingleBlock;
+        command.index = kSDMMC_ReadSingleBlock;
     }
     else
     {
-#if ((! defined BSP_FSL_SDHC_ENABLE_AUTOCMD12) && (defined MMC_SUP_PRE_DEF_BLK_CNT))
-         /* If enabled the pre-define count read/write featue of the card, 
-         need to set block count firstly */
-#if defined MMC_SUP_PRE_DEF_BLK_CNT
-         SDEMMC_SetBlkCnt(card, blockCount);
-#endif
-
-#endif   
+        if ((!host->sdhcConfig->enableAutoCMD12) && (card->enablePreDefBlkCnt))
+        {
+            /* If enabled the pre-define count read/write featue of the card, need to set block count firstly */
+            MMC_SetBlockCount(card, blockCount);
+        }         
     }
 
-    req->argument = startBlock;
-    if (!IS_HIGHCAPACITY_CARD(card))
+    command.argument = startBlock;
+    if (!IS_MMC_HIGH_CAPACITY(card))
     {
-        req->argument *= data.blockSize;
+        command.argument *= data.blockSize;
     }
-    req->flags = FSL_SDHC_REQ_FLAGS_DATA_READ;
-    req->respType = kSdhcRespTypeR1;
+    command.responseType = kSDHC_ReponseTypeR1;
 
-    data.req = req;
-    if (kStatus_SDHC_NoError !=
-            SDHC_DRV_IssueRequestBlocking(card->hostInstance,
-                                          req,
-                                          FSL_SDCARD_REQUEST_TIMEOUT))
+    host->currentCmd = &command;
+    host->currentData = &data;
+    
+    if (kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)
+        || (!SDMMC_R1_ERROR_BITS(command->response[0]))
+        || (kStatus_Success != SDHC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))
     {
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return kStatus_SDHC_RequestFailed;
+        
+        return kStatus_SDMMC_SendCommandFailed;
     }
 
-#if ((! defined BSP_FSL_SDHC_ENABLE_AUTOCMD12) && (! defined MMC_SUP_PRE_DEF_BLK_CNT))
-    if (data.blockCount > 1)
+    if ((!host->sdhcConfig->enableAutoCMD12) && (!card->enablePreDefBlkCnt))  
     {
-         if (kStatus_SDHC_NoError != SDEMMC_StopTransmission(card))
-         {
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-             OSA_MemFree(req);
-#endif
-             req = NULL;
-             return kStatus_SDHC_StopTransmissionFailed;
-          }
+        if (blockCount > 1)
+        {
+            if (kStatus_Success != MMC_StopTransmission(card))
+            {
+                return kStatus_SDMMC_StopTransmissionFailed;
+            }
+        }
     }
-#endif
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return kStatus_SDHC_NoError;
+ 
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_Write
- * Description: write data from specific MMC card
+ * Function Name: MMC_Write
+ * Description: Writes data from specific MMC card
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_Write(sdhc_card_t *card,
-                                      uint8_t *buffer,
-                                      uint32_t startBlock,
-                                      uint32_t blockSize,
-                                      uint32_t blockCount)
+static status_t MMC_Write(mmc_card_t *card, uint8_t *buffer, uint32_t startBlock, uint32_t blockSize, 
+                  uint32_t blockCount)
 {
-    sdhc_request_t *req = 0;
+    sdhc_cmd_t command = {0};
     sdhc_data_t data = {0};
-#if ! defined BSP_FSL_SDHC_USING_DYNALLOC
-    sdhc_request_t request = {0};
-    req = &request;
-#endif
+    sdhc_host_t *host;
     assert(card);
+    assert(card->host);
     assert(buffer);
     assert(blockCount);
     assert(blockSize);
-    assert(blockSize == FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE);
+    assert(blockSize == FSL_CARD_DEFAULT_BLOCK_SIZE);
+
+    host = card->host;
+
     /* Check address range */
-    switch(card->curAccPart)
+    if ((IS_MMC_HIGH_CAPACITY(card) && (blockSize != 512)) || (blockSize > card->blockSize)
+     || (blockSize > card->host->capability->maxBlockLength) || (blockSize % 4))
     {
-    case kAccBootPartNot:
-      {
-         if ((IS_HIGHCAPACITY_CARD(card) && (blockSize != 512))
-             || (blockSize > card->blockSize)
-             || (blockSize > card->host->maxBlockSize)
-             || (blockSize % 4))
-         {
-             return kStatus_SDHC_BlockSizeNotSupportError;
-         }
-         break;
-      }
-    case kAccBootPart1:
-    case kAccBootPart2:
-      {
-         /* Boot part1 and part2 have the same partition size */
-         if(((startBlock+blockCount)*FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE) \
-                                 > card->bootPartSizeAsByte)
-         {
-             return kStatus_SDHC_BlockSizeNotSupportError;
-         }
-         break;
-      }
-      
+     return kStatus_SDMMC_CardNotSupport;
     }
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    req = (sdhc_request_t *)OSA_MemAllocZero(sizeof(sdhc_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDHC_OutOfMemory;
-    }
-#endif
 
     data.blockSize = blockSize;
     data.blockCount = blockCount;
     data.buffer = (uint32_t *)buffer;
 
-    req->data = &data;
-    req->cmdIndex = kWriteMultipleBlock;
+    command.index = kSDMMC_WriteMultipleBlock;
     if (data.blockCount == 1)
     {
-        req->cmdIndex = kWriteBlock;
+        command.index = kSDMMC_WriteBlock;
     }
     else
     {
-#if ((! defined BSP_FSL_SDHC_ENABLE_AUTOCMD12) && (defined MMC_SUP_PRE_DEF_BLK_CNT))
-        /* If enabled the pre-define count read/write featue of the card, 
-        need to set block count firstly */
-#if defined MMC_SUP_PRE_DEF_BLK_CNT
-        SDEMMC_SetBlkCnt(card, blockCount);
-#endif
-#endif
-
-    }
-    req->argument = startBlock;
-    if (!IS_HIGHCAPACITY_CARD(card))
-    {
-        req->argument *= data.blockSize;
-    }
-    req->respType = kSdhcRespTypeR1;
-    data.req = req;
-    if (kStatus_SDHC_NoError !=
-            SDHC_DRV_IssueRequestBlocking(card->hostInstance,
-                                          req,
-                                          FSL_SDCARD_REQUEST_TIMEOUT))
-    {
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return kStatus_SDHC_RequestFailed;
-    }
-
-    if (data.blockCount > 1)
-    {
-#if ((! defined BSP_FSL_SDHC_ENABLE_AUTOCMD12) && (!defined MMC_SUP_PRE_DEF_BLK_CNT))             
-        if (kStatus_SDHC_NoError != SDEMMC_StopTransmission(card))
+        if ((!host->sdhcConfig->enableAutoCMD12) && (card->enablePreDefBlkCnt))
         {
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-            OSA_MemFree(req);
-#endif
-            req = NULL;
-            return kStatus_SDHC_StopTransmissionFailed;
-        }
-
-#endif
-        if (kStatus_SDHC_NoError != SDEMMC_SendStatus(card))
-        {
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-            OSA_MemFree(req);
-#endif
-            req = NULL;
-            return kStatus_SDHC_SendCardStatusFailed;
+            /* If enabled the pre-define count read/write featue of the card, need to set block count firstly */
+            MMC_SetBlockCount(card, blockCount);
         }
     }
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return kStatus_SDHC_NoError;
+    command.argument = startBlock;
+    if (!IS_MMC_HIGH_CAPACITY(card))
+    {
+        command.argument *= blockSize;
+    }
+    command.responseType = kSDHC_ReponseTypeR1;
+
+    host->currentCmd = &command;
+    host->currentData = &data;
+
+    if (kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)
+        || (!SDMMC_R1_ERROR_BITS(command->response[0]))
+        || (kStatus_Success != SDHC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))
+    {
+        return kStatus_SDMMC_SendCommandFailed;
+    }
+
+    if (blockCount > 1)
+    {
+        if ((!host->sdhcConfig->enableAutoCMD12) && (!card->enablePreDefBlkCnt))   
+        {
+            if (kStatus_Success != MMC_StopTransmission(card))
+            {
+                return kStatus_SDMMC_StopTransmissionFailed;
+            }
+        }          
+
+        if (kStatus_Success != MMC_SendStatus(card))
+        { 
+            return kStatus_SDMMC_SendStatusFailed;
+        }
+    }
+
+    return kStatus_Success;
 }
              
 /*FUNCTION****************************************************************
  *
- * Function Name: EMMC_AllSendCid
- * Description: send all_send_cid command
+ * Function Name: MMC_ReadBlocks
+ * Description: Reads blocks from card with default block size from SD or MMC card
  *
  *END*********************************************************************/
-static sdhc_status_t EMMC_AllSendCid(sdhc_card_t *card)
-{
-    sdhc_request_t *req = 0;
-#if ! defined BSP_FSL_SDHC_USING_DYNALLOC
-    sdhc_request_t request = {0};
-    req = &request;
-#endif
-    assert(card);
-
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    req = (sdhc_request_t *)OSA_MemAllocZero(sizeof(sdhc_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDHC_OutOfMemory;
-    }
-#endif
-    req->cmdIndex = kAllSendCid;
-    req->argument = 0;
-    req->respType = kSdhcRespTypeR2;
-    if (kStatus_SDHC_NoError ==
-            SDHC_DRV_IssueRequestBlocking(card->hostInstance,
-                                          req,
-                                          FSL_SDCARD_REQUEST_TIMEOUT))
-    {
-        memcpy(card->rawCid, req->response, sizeof(card->rawCid));
-        EMMC_DecodeCid(req->response, card);    
-        
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return kStatus_SDHC_NoError;
-    }
-#if defined BSP_FSL_SDHC_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return kStatus_SDHC_RequestFailed;
-}
-
-/*FUNCTION****************************************************************
- *
- * Function Name: SDCARD_DRV_SendCsd
- * Description: get csd from card
- *
- *END*********************************************************************/
-static sdmmc_status_t SD_SendCsd(sd_t * card)
-{
-    host_request_t *req = 0;
-#if ! defined FSL_CARD_DRIVER_USING_DYNALLOC
-    host_request_t request = {0};
-    req = &request;
-#endif
-    assert(card);
-
-#if defined FSL_CARD_DRIVER_USING_DYNALLOC
-    req = (host_request_t *)OSA_MemAllocZero(sizeof(host_request_t));
-    if (req == NULL)
-    {
-        return kStatus_SDMMC_OutOfMemory;
-    }
-#endif
-    req->cmdIndex = kSendCsd;
-    req->argument = card->rca << 16;
-    req->respType = kSdhcRespTypeR2;
-    card->host->currentReq = req;
-    if (kStatus_SDMMC_NoError ==
-            SDMMC_IssueRequestBlocking(card, FSL_CARD_REQUEST_TIMEOUT))
-    {
-        memcpy(card->rawCsd, req->response, sizeof(card->rawCsd));
-        /*The response is from bit 127:8 in R2, corrisponding to req->response[3]
-        :req->response[0][31:8]*/
-        switch(card->cardType)
-        {
-        case kCardTypeSd:
-          {
-              SDCARD_DRV_SdDecodeCsd(req->response, card);
-              break;
-          }
-        case kCardTypeMmc:
-          {
-              SDCARD_DRV_MmcDecodeCsd(req->response, card);
-              break;
-          }
-        default:
-          {
-              break;
-          }
-        }
-        
-#if defined FSL_CARD_DRIVER_USING_DYNALLOC
-        OSA_MemFree(req);
-#endif
-        req = NULL;
-        return kStatus_SDMMC_NoError;
-    }
-#if defined FSL_CARD_DRIVER_USING_DYNALLOC
-    OSA_MemFree(req);
-#endif
-    req = NULL;
-    return kStatus_SDMMC_RequestFailed;
-}
-
-/*FUNCTION****************************************************************
- *
- * Function Name: SDCARD_DRV_Init
- * Description: initialize card on the given host controller
- *
- *END*********************************************************************/
-sdhc_status_t SDCARD_DRV_Init(sdhc_host_t *host, sdhc_card_t *card)
-{
-    sdhc_status_t err = kStatus_SDHC_NoError;
-    uint32_t acmd41Arg;
-
-    assert(card);
-    assert(host);
-
-    card->cardType = kCardTypeUnknown;
-    card->host = host;
-    card->hostInstance = host->instance;
-
-    if (SDHC_DRV_ConfigClock(card->hostInstance, SDMMC_CLK_400KHZ))
-    {
-        return kStatus_SDHC_SetClockFailed;
-    }
-
-    err = SDCARD_DRV_GoIdle(card);
-    if (err)
-    {
-        return kStatus_SDHC_SetCardToIdle;
-    }
-    acmd41Arg = card->host->ocrSupported;
-
-    err = SDCARD_DRV_SdSendIfCond(card);
-    if (err == kStatus_SDHC_NoError)
-    {
-        /* SDHC or SDXC card */
-        acmd41Arg |= SD_OCR_HCS;
-        card->caps |= SDMMC_CARD_CAPS_SDHC;
-    }
-    else
-    {
-        /* SDSC card */
-        err = SDCARD_DRV_GoIdle(card);
-        if (err)
-        {
-            return kStatus_SDHC_SetCardToIdle;
-        }
-    }
-
-    err = SDCARD_DRV_SdAppSendOpCond(card, acmd41Arg);
-    if (kStatus_SDHC_TimeoutError == err)
-    {
-        /* MMC card */
-        //return kStatus_SDHC_NotSupportYet;
-        
-        return SDCARD_DRV_MmcInit(card);
-    }
-    else if (err)
-    {
-        return kStatus_SDHC_SendAppOpCondFailed;
-    }
-
-    return SDCARD_DRV_SdInit(card);
-}
-             
-/*FUNCTION****************************************************************
- *
- * Function Name: SDCARD_DRV_ReadBlocks
- * Description: read blocks from card with default block size from SD or MMC card
- *
- *END*********************************************************************/
-sdhc_status_t SDCARD_DRV_ReadBlocks(sdhc_card_t *card,
-                                    uint8_t *buffer,
-                                    uint32_t startBlock,
-                                    uint32_t blockCount)
+status_t MMC_ReadBlocks(mmc_card_t *card,  uint8_t *buffer, uint32_t startBlock, uint32_t blockCount)
 {
     uint32_t blkCnt, blkLeft, blkDone;
-    sdhc_status_t err = kStatus_SDHC_NoError;
-
+    status_t err = kStatus_Success;
+    sdhc_host_t *host;
     assert(card);
+    assert(card->host);
     assert(buffer);
     assert(blockCount);
 
+    host = card->host;
     blkLeft = blockCount;
     blkDone = 0;
 
-    if ((blockCount + startBlock) > card->blockCount)
+    if ( kStatus_Success != MMC_CheckIORange(card, startBlock, blockCount))
     {
-        return kStatus_SDHC_InvalidIORange;
+        return kStatus_SDMMC_InvalidIORange;
     }
 
     while(blkLeft)
     {
-        if (blkLeft > card->host->maxBlockCount)
+        if (blkLeft > host->capability->maxBlockLength)
         {
-            blkLeft = blkLeft - card->host->maxBlockCount;
-            blkCnt = card->host->maxBlockCount;
+            blkLeft = blkLeft - host->capability->maxBlockLength;
+            blkCnt = host->capability->maxBlockLength;
         }
         else
         {
             blkCnt = blkLeft;
             blkLeft = 0;
         }
-        switch(card->cardType)
-        {
-        case kCardTypeSd:
-            {
-                err = SDCARD_DRV_SdRead(card, buffer, startBlock,FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE,  blockCount);
-                break;
-            }
-        case kCardTypeMmc:
-            {
-                err = SDCARD_DRV_MmcRead(card, buffer, startBlock, FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE, blockCount);
-                break;
-            }
-        default:
-            {
-                err = kStatus_SDHC_CardTypeError;
-                break;
-            }
-        }  
-        if (err != kStatus_SDHC_NoError)
+        err = MMC_Read(card, buffer, startBlock, FSL_CARD_DEFAULT_BLOCK_SIZE, blockCount);
+
+        if (err != kStatus_Success)
         {
             return err;
         }
@@ -2198,62 +1615,44 @@ sdhc_status_t SDCARD_DRV_ReadBlocks(sdhc_card_t *card,
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SDCARD_DRV_WriteBlocks
- * Description: write blocks to card with default block size to SD/MMC card
+ * Function Name: MMC_WriteBlocks
+ * Description: Writes blocks to card with default block size to SD/MMC card
  *
  *END*********************************************************************/
-sdhc_status_t SDCARD_DRV_WriteBlocks(sdhc_card_t *card,
-                                     uint8_t *buffer,
-                                     uint32_t startBlock,
-                                     uint32_t blockCount)
+status_t MMC_WriteBlocks(mmc_card_t *card, uint8_t *buffer, uint32_t startBlock, uint32_t blockCount)
 {
     uint32_t blkCnt, blkLeft, blkDone;
-    sdhc_status_t err = kStatus_SDHC_NoError;
-
+    status_t err = kStatus_Success;
+    sdhc_host_t *host;
     assert(card);
+    assert(card->host);
     assert(buffer);
     assert(blockCount);
 
+    host = card->host;
     blkLeft = blockCount;
     blkDone = 0;
 
-    if ((blockCount + startBlock) > card->blockCount)
+    if ( kStatus_Success != MMC_CheckIORange(card, startBlock, blockCount))
     {
-        return kStatus_SDHC_InvalidIORange;
+        return kStatus_SDMMC_InvalidIORange;
     }
 
     while(blkLeft)
     {
-        if (blkLeft > card->host->maxBlockCount)
+        if (blkLeft > card->host->capability->maxBlockLength)
         {
-            blkLeft = blkLeft - card->host->maxBlockCount;
-            blkCnt = card->host->maxBlockCount;
+            blkLeft = blkLeft - card->host->capability->maxBlockLength;
+            blkCnt = card->host->capability->maxBlockLength;
         }
         else
         {
             blkCnt = blkLeft;
             blkLeft = 0;
         }
-
-        switch(card->cardType)
-        {
-        case kCardTypeSd:
-            {
-                err = SDCARD_DRV_SdWrite(card, buffer, startBlock, FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE, blockCount);
-                break;
-            }
-        case kCardTypeMmc:
-            {
-                err = SDCARD_DRV_MmcWrite(card, buffer, startBlock, FSL_SDHC_CARD_DEFAULT_BLOCK_SIZE, blockCount);
-                break;
-            }
-        default:
-            {
-                err = kStatus_SDHC_CardTypeError;
-                break;
-            }
-        } 
-        if (err != kStatus_SDHC_NoError)
+        
+        err = MMC_Write(card, buffer, startBlock, FSL_CARD_DEFAULT_BLOCK_SIZE, blockCount);
+        if (err != kStatus_Success)
         {
             return err;
         }
@@ -2265,63 +1664,58 @@ sdhc_status_t SDCARD_DRV_WriteBlocks(sdhc_card_t *card,
              
 /*FUNCTION****************************************************************
  *
- * Function Name: SDCARD_DRV_EraseBlocks
- * Description: erase block range from SD/MMC card with default block size
+ * Function Name: MMC_EraseBlocks
+ * Description: Erases block range from SD/MMC card with default block size
  *
  *END*********************************************************************/
-sdhc_status_t SDCARD_DRV_EraseBlocks(sdhc_card_t *card,
-                                     uint32_t startBlock,
-                                     uint32_t blockCount)
+status_t MMC_EraseBlocks(mmc_card_t *card, uint32_t startBlock, uint32_t blockCount)
 {
-    uint32_t blkDone = 0, blkLeft, blkCnt;
-    sdhc_status_t err = kStatus_SDHC_NoError;
+    uint32_t eraseGroupDone = 0, eraseGroupStart, eraseGroupLeft, eraseGroupCount;
+    status_t err = kStatus_Success;
     assert(card);
     assert(blockCount);
 
-
-    blkLeft = blockCount;
-    while(blkLeft)
+    /* startBlock must be group address boundry */
+    if ((!(startBlock + 1) % card->eraseGroupSize) || !(blockCount % card->eraseGroupSize))
     {
-        /* Devide total blocks to multiple sectorSize(max blocks can be erase one time)*/
-        if (blkLeft > (card->csd.sdCsd.sectorSize + 1))
+        return kStatus_SDMMC_NotEraseGroupAddress;
+    }
+    
+    if ( kStatus_Success != MMC_CheckIORange(card, startBlock, blockCount))
+    {
+        return kStatus_SDMMC_InvalidIORange;
+    }
+    
+    eraseGroupStart = ((startBlock + 1)/card->eraseGroupSize - 1);
+    eraseGroupCount = blockCount/card->eraseGroupSize;
+    eraseGroupLeft = eraseGroupCount;
+
+    while(eraseGroupLeft)
+    {
+        /* Max groups can be erase one time */
+        if (eraseGroupLeft > card->writeProtectGroupSize)
         {
-            blkCnt = card->csd.sdCsd.sectorSize + 1;
-            blkLeft = blkLeft - blkCnt;
+            eraseGroupCount = card->writeProtectGroupSize;
+            eraseGroupLeft = eraseGroupLeft - eraseGroupCount;
         }
         else
         {
-            blkCnt = blkLeft;
-            blkLeft = 0;
-        }
-        switch(card->cardType)
-        {
-        case kCardTypeSd:
-            {
-                err = SDCARD_DRV_SdErase(card, startBlock, blockCount);
-                break;
-            }
-        case kCardTypeMmc:
-            {
-                err = SDCARD_DRV_MmcErase(card, startBlock, blockCount);
-                break;
-            }
-        default:
-            {
-                err = kStatus_SDHC_CardTypeError;
-                break;
-            }
-        }  
-        if (kStatus_SDHC_NoError != err)
-        {
-            return kStatus_SDHC_CardEraseBlocksFailed;
+            eraseGroupCount = eraseGroupLeft;
+            eraseGroupLeft = 0;
         }
 
-        if (kStatus_SDHC_NoError != SDCARD_DRV_SendStatus(card))
+        err = MMC_Erase(card, (eraseGroupStart + eraseGroupDone), eraseGroupCount);
+        if (kStatus_Success != err)
         {
-            return kStatus_SDHC_SendCardStatusFailed;
+            return kStatus_Fail;
         }
-        blkDone += blkCnt;
+
+        if (kStatus_Success != MMC_SendStatus(card))
+        {
+            return kStatus_SDMMC_SendStatusFailed;
+        }
+        eraseGroupDone += eraseGroupCount;
     }
-    return kStatus_SDHC_NoError;
+    return kStatus_Success;
 }
 

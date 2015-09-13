@@ -1,10 +1,9 @@
 #include <stdbool.h>
-#include "card.h"
+//#include "card.h"
 
 // Test function declare
 void init_hardware(void);
-bool test_card_detection(void);
-bool test_data_access(void);
+bool test_sd();
 
 bool createCmdEvent();
 bool waitCmdEvent(uint32_t timeout); 
@@ -14,9 +13,13 @@ bool createDataEvent();
 bool waitDataEvent(uint32_t timeout);
 bool notifyDataEvent();
 bool deleteDataEvent();
-void markStartTimeMsec();
-uint32_t getElapsedTimeMsec();
-void delayTimeMsec();
+
+/* Maybe better if only provide the get current time interface */
+uint32_t getCurrentTime();
+uint32_t getRangeTime();
+void delayTimeMsec(uint32_t msec);
+
+
 bool createCardDetectEvent();
 bool waitCardDetectEvent(uint32_t timeout);
 bool notifyCardDetectEvent();

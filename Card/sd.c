@@ -29,8 +29,11 @@
  */
 
 
-#include <string.h>
+#include "sdhc.h"
 #include "card.h"
+#include "sdmmc.h"
+
+
 
 /*FUNCTION****************************************************************
  *
@@ -38,11 +41,10 @@
  * Description: Checks if the card is ready only
  *
  *END*********************************************************************/
-bool SD_CheckReadOnly(sd_t *card)
+bool SD_CheckReadOnly(sd_card_t *card)
 {
     assert(card);
-    return ((card->csd.flags & SD_CSD_PERM_WRITE_PROTECT) ||
-            (card->csd.flags & SD_CSD_TMP_WRITE_PROTECT));   
+    return ((card->csd.flags & SD_CSD_PERM_WRITE_PROTECT) || (card->csd.flags & SD_CSD_TMP_WRITE_PROTECT));   
 }
 
 /*FUNCTION****************************************************************
@@ -51,41 +53,11 @@ bool SD_CheckReadOnly(sd_t *card)
  * Description: Selects or deselects card
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_SelectCard(sd_t *card, bool isSelected)
+
+static status_t inline SD_SelectCard(sd_card_t *card, bool isSelected)
 {
-    host_t* host = card->host;
-    card_cmd_t *cardCmd = 0;
-    card_cmd_t command = {0};
-    cardCmd = &command;
     assert(card);
-
-    cardCmd->cmdIndex = kSdmmcSelectCard;
-    if (isSelected)
-    {
-        cardCmd->argument = card->rca << 16;
-        cardCmd->respType = kSdmmcRespTypeR1;
-    }
-    else
-    {
-        cardCmd->argument = 0;
-        cardCmd->respType = kSdmmcRespTypeNone;
-    }
-
-    host->currentCmd = cardCmd;
-    host->currentData = NULL;
-
-    if ((kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
-        || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd)))
-    {
-        cardCmd = NULL;
-        return kStatus_SDMMC_SendCardCmdFailed;
-    }
-
-    cardCmd = NULL;
-
-    /* Wait until card to transfer state */
-    return kStatus_SDMMC_NoError;
+    return SDMMC_SelectCard(card->host, card->rca, isSelected);
 }
 
 /*FUNCTION****************************************************************
@@ -94,49 +66,11 @@ static sdmmc_status_t SD_SelectCard(sd_t *card, bool isSelected)
  * Description:  Sends the sd status
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_SendStatus(sd_t *card)
+static status_t inline SD_SendStatus(sd_card_t *card)
 {
     assert(card);
-    host_t * host = card->host;
-    card_cmd_t *cardCmd = 0;
-    sdmmc_status_t err = kStatus_SDMMC_NoError;
-    uint32_t timeout = 1000;
-    card_cmd_t command = {0};
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdmmcSendStatus;
-    cardCmd->argument = card->rca << 16;
-    cardCmd->respType = kSdmmcRespTypeR1;
-
-    do
-    {
-        host->currentCmd = cardCmd;
-        host->currentData = 0;
-        if ((kStatus_SDMMC_NoError != 
-            SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
-            || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd)))
-        {
-            cardCmd = NULL;
-            return kStatus_SDMMC_SendCardCmdFailed;
-        }
-
-        if ((cardCmd->response[0] & SDMMC_R1_READY_FOR_DATA)
-             && (SDMMC_R1_CURRENT_STATE(cardCmd->response[0]) != SDMMC_R1_STATE_PRG))
-        {
-            break;
-        }
-
-        host->delayTimeMsec(1);
-    } while(timeout--);
-
-    if (!timeout)
-    {
-        cardCmd = NULL;
-        return kStatus_SDMMC_TimeoutError;
-    }
-
-    cardCmd = NULL;
-    return err;
+    return SDMMC_SendStatus(card->host, card->rca);
 }
 
 /*FUNCTION****************************************************************
@@ -146,7 +80,7 @@ static sdmmc_status_t SD_SendStatus(sd_t *card)
  * host controller
  *
  *END*********************************************************************/
-void SD_Shutdown(sd_t *card)
+void SD_DeInit(sd_card_t *card)
 {
     assert(card);
 
@@ -157,51 +91,14 @@ void SD_Shutdown(sd_t *card)
 /*FUNCTION****************************************************************
  *
  * Function Name: SDMMC_SendApplicationCmd
- * Description: Sends application command to card
+ * Description: Sends application commandMemory to card
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_SendApplicationCmd(sd_t *card)
+static status_t inline SD_SendApplicationCmd(sd_card_t *card)
 {
     assert(card);
-    host_t *host = card->host;
-    assert(host);
-    card_cmd_t *cardCmd = 0;
-    sdmmc_status_t ret = kStatus_SDMMC_NoError;
-    card_cmd_t command = {0};
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdmmcAppCmd;
-    cardCmd->argument = 0;
-    cardCmd->argument = card->rca << 16;
-    cardCmd->respType = kSdmmcRespTypeR1;
-
-    host->currentCmd = cardCmd;
-    host->currentData = 0;
-
-    if ((kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
-            || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd)))
-    {
-        if (cardCmd->errors & CARD_CMD_ERR_CMD_TIMEOUT)
-        {
-            ret = kStatus_SDMMC_TimeoutError;
-        }
-        else
-        {
-            ret = kStatus_SDMMC_SendCardCmdFailed;
-        }
-        cardCmd = NULL;
-        return ret;
-    }
-
-    if (!(cardCmd->response[0] & SDMMC_R1_APP_CMD))
-    {
-        cardCmd = NULL;
-        return kStatus_SDMMC_CardNotSupport;
-    }
-
-    cardCmd = NULL;
-    return kStatus_SDMMC_NoError;
+    return SDMMC_SendApplicationCmd(card->host, card->rca);
 }
 
 /*FUNCTION****************************************************************
@@ -210,62 +107,26 @@ static sdmmc_status_t SD_SendApplicationCmd(sd_t *card)
  * Description: Resets all cards to idle state
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_GoIdle(sd_t *card)
+static status_t inline SD_GoIdle(sd_card_t *card)
 {
     assert(card);
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    sdmmc_status_t err;
-    card_cmd_t command = {0};
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdmmcGoIdleState;
-
-    host->currentCmd = cardCmd;
-    host->currentData = 0;
-
-    err = SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT);
-
-    cardCmd = NULL;
-    return err;
+    return SDMMC_GoIdle(card->host);
 }
 
-#if ! defined BSP_HOST_ENABLE_AUTOCMD12
 /*FUNCTION****************************************************************
  *
  * Function Name: SDMMC_StopTransmission
- * Description:  Sends stop transmission command to card to stop ongoing
+ * Description:  Sends stop transmission commandMemory to card to stop ongoing
  * data transferring.
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_StopTransmission(sd_t* card)
+static status_t inline SD_StopTransmission(sd_card_t* card)
 {
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    sdmmc_status_t err = kStatus_SDMMC_NoError;
-    card_cmd_t command = {0};
+    assert(card);
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdmmcStopTransmission;
-    cardCmd->flags |= CARD_CMD_FLAGS_STOP_TRANS;
-    cardCmd->argument = 0;
-    cardCmd->respType = kSdmmcRespTypeR1b;
-    
-    host->currentCmd = cardCmd;
-    host->currentData = 0;
-
-    if ((kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
-            || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd)))
-    {
-        cardCmd = NULL;
-        return kStatus_SDMMC_SendCardCmdFailed;
-    }
-
-    cardCmd = NULL;
-    return err;
+    SDMMC_StopTransmission(card->host);
 }
-#endif
 
 /*FUNCTION****************************************************************
  *
@@ -275,30 +136,11 @@ static sdmmc_status_t SD_StopTransmission(sd_t* card)
  * block length is used.
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_SetBlockSize(sd_t *card, uint32_t blockSize)
+static status_t inline SD_SetBlockSize(sd_card_t *card, uint32_t blockSize)
 {
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    card_cmd_t command = {0};
+    assert(card);
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdmmcSetBlockLen;
-    cardCmd->argument = blockSize;
-    cardCmd->respType = kSdmmcRespTypeR1;
-
-    host->currentCmd = cardCmd;
-    host->currentData = 0;
-
-    if ((kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
-            || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd)))
-    {
-        cardCmd = NULL;
-        return kStatus_SDMMC_SendCardCmdFailed;
-    }
-
-    cardCmd = NULL;
-    return kStatus_SDMMC_NoError;
+    SDMMC_SetBlockSize(card->host, blockSize);
 }
 
 /*FUNCTION****************************************************************
@@ -307,7 +149,7 @@ static sdmmc_status_t SD_SetBlockSize(sd_t *card, uint32_t blockSize)
  * Description: Decodes csd register
  *
  *END*********************************************************************/
-static void SD_DecodeCsd(uint32_t *rawCsd, sd_t *card)
+static void SD_DecodeCsd(uint32_t *rawCsd, sd_card_t *card)
 {
     sd_csd_t *csd;
     assert(rawCsd);
@@ -361,7 +203,7 @@ static void SD_DecodeCsd(uint32_t *rawCsd, sd_t *card)
         csd->cSize |= (uint32_t)((rawCsd[1] & 0xFFFF0000U) >> 16);
         if (csd->cSize >= 0xFFFF)
         {
-            card->caps |= SD_CARD_CAPS_SDXC;
+            card->caps |= SD_CAPS_SDXC;
         }
         card->blockCount = (csd->cSize + 1) * 1024;
     }
@@ -408,7 +250,7 @@ static void SD_DecodeCsd(uint32_t *rawCsd, sd_t *card)
  * Description: Decodes cid register
  *
  *END*********************************************************************/
-static void SD_DecodeCid(uint32_t *rawCid, sd_t *card)
+static void SD_DecodeCid(uint32_t *rawCid, sd_card_t *card)
 {
     sd_cid_t *cid;
     assert(rawCid);
@@ -437,84 +279,74 @@ static void SD_DecodeCid(uint32_t *rawCid, sd_t *card)
 /*FUNCTION****************************************************************
  *
  * Function Name: SD_SendRca
- * Description: Sends rca command to card to get relative card address
+ * Description: Sends rca commandMemory to card to get relative card address
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_SendRca(sd_t *card)
+static status_t SD_SendRca(sd_card_t *card)
 {
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    card_cmd_t command = {0};
+    sdhc_host_t *host;
+    sdhc_cmd_t command = {0};
     assert(card);
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdSendRelativeAddr;
-    cardCmd->argument = 0;
-    cardCmd->respType = kSdmmcRespTypeR6;
+    host = card->host;
 
-    host->currentCmd = cardCmd;
+    command.index = kSD_SendRelativeAddr;
+    command.argument = 0;
+    command.responseType = kSDHC_ReponseTypeR6;
+
+    host->currentCmd = &command;
     host->currentData = 0;
 
-    if (kStatus_SDMMC_NoError == 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+    if (kStatus_Success == SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
     {
-        card->rca = cardCmd->response[0] >> 16;
-        cardCmd = NULL;
-        return kStatus_SDMMC_NoError;
+        card->rca = command->response[0] >> 16;
+        return kStatus_Success;
     }
     
-    cardCmd = NULL;
-    return kStatus_SDMMC_SendCardCmdFailed;
+    return kStatus_Fail;
 }
 
 /*FUNCTION****************************************************************
  *
  * Function Name: SD_Switch
- * Description: Sends switch command to card
+ * Description: Sends switch commandMemory to card
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_Switch(sd_t *card, uint32_t mode, uint32_t group,
-                       uint32_t value, uint32_t *resp)
+static status_t SD_Switch(sd_card_t *card, uint32_t mode, uint32_t group, uint32_t value, uint32_t *resp)
 {
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    card_data_t cardData = {0};
-    card_cmd_t command = {0};
+    sdhc_host_t *host;
+    sdhc_cmd_t command = {0};
+    sdhc_data_t data = {0};
     assert(card);
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdSwitchFunction;
-    cardCmd->argument = mode << 31 | 0x00FFFFFF;
-    cardCmd->argument &= ~((uint32_t)(0xF) << (group * 4));
-    cardCmd->argument |= value << (group * 4);
-    cardCmd->respType = kSdmmcRespTypeR1;
-    
-    cardData.blockSize = 64;
-    cardData.blockCount = 1;
-    cardData.buffer = resp;
-    cardData.flags |= CARD_DATA_FLAGS_DATA_READ;
+    host = card->host;
 
-    if (kStatus_SDMMC_NoError != SD_SetBlockSize(card, cardData.blockSize))
+    command.index = kSD_Switch;
+    command.argument = mode << 31 | 0x00FFFFFF;
+    command.argument &= ~((uint32_t)(0xF) << (group * 4));
+    command.argument |= value << (group * 4);
+    command.responseType = kSDHC_ReponseTypeR1;
+    
+    data.blockSize = 64;
+    data.blockCount = 1;
+    data.buffer = resp;
+    data.isRead = true;
+
+    if (kStatus_Success != SD_SetBlockSize(card, data.blockSize))
     {
-        cardCmd = NULL;
         return kStatus_SDMMC_SetCardBlockSizeFailed;
     }
     
-    host->currentCmd = cardCmd;
-    host->currentData = &cardData;
+    host->currentCmd = &command;
+    host->currentData = &data;
 
-    if (kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)
-        || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd))
-        || (kStatus_SDMMC_NoError != 
-            SDMMC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))
-    {
-        cardCmd = NULL;
-        return kStatus_SDMMC_SendCardCmdFailed;
+    if (kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)|| (!SDMMC_R1_ERROR_BITS(command->response[0]))
+        || (kStatus_Success != SDHC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))
+    {        
+        return kStatus_SDMMC_TransferDataFailed;
     }
-
-    cardCmd = NULL;
-    return kStatus_SDMMC_NoError;
+    
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
@@ -523,7 +355,7 @@ static sdmmc_status_t SD_Switch(sd_t *card, uint32_t mode, uint32_t group,
  * Description: Decodes scr register
  *
  *END*********************************************************************/
-static void SD_DecodeScr(uint32_t *rawScr, sd_t *card)
+static void SD_DecodeScr(uint32_t *rawScr, sd_card_t *card)
 {
     sd_scr_t *scr;
     assert(rawScr);
@@ -566,7 +398,7 @@ static void SD_DecodeScr(uint32_t *rawScr, sd_t *card)
     }
     if (card->scr.sdBusWidths & SD_SCR_BUS_WIDTHS_4BIT)
     {
-        card->caps |= SD_CARD_CAPS_BUSWIDTH_4BITS;
+        card->caps |= SD_CAPS_BUS_WIDTH_4BITS;
     }
 }
 
@@ -576,53 +408,44 @@ static void SD_DecodeScr(uint32_t *rawScr, sd_t *card)
  * Description: Fetches scr register from card
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_SendScr(sd_t *card)
+static status_t SD_SendScr(sd_card_t *card)
 {
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    card_data_t cardData = {0};
-    sdmmc_status_t err = kStatus_SDMMC_NoError;
+    sdhc_host_t *host;
+    sdhc_cmd_t command = {0};
+    sdhc_data_t data = {0};
     uint32_t rawScr[2] = {0};
-    card_cmd_t command = {0};
     assert(card);
 
-    cardCmd = &command;
-    err = SD_SendApplicationCmd(card);
-    if (err)
+    host = card->host;
+    
+    if (kStatus_Success != SD_SendApplicationCmd(card))
     {
-        cardCmd = NULL;
-        return err;
+        return kStatus_SDMMC_SendAppCmdFailed;
     }
     
-    cardCmd->cmdIndex = kSdAppSendScr;
-    cardCmd->respType = kSdmmcRespTypeR1;
-    cardCmd->argument = 0;
-    host->currentCmd = cardCmd;
+    command.index = kSD_AppSendScr;
+    command.responseType = kSDHC_ReponseTypeR1;
+    command.argument = 0;
+    host->currentCmd = &command;
 
-    cardData.blockSize = 8;
-    cardData.blockCount = 1;
-    cardData.buffer = rawScr;
-    cardData.flags |= CARD_DATA_FLAGS_DATA_READ;
-    host->currentData = &cardData;
+    data.blockSize = 8;
+    data.blockCount = 1;
+    data.buffer = rawScr;
+    data.flags |= CARD_DATA_FLAGS_DATA_READ;
+    host->currentData = &data;
 
-    if ((kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
-        || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd))
-        || (kStatus_SDMMC_NoError != 
-            SDMMC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))
+    if ((kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)) || (!SDMMC_R1_ERROR_BITS(command->response[0]))
+        || (kStatus_Success != SDHC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))
     {
-        cardCmd = NULL;
-        return kStatus_SDMMC_SendCardCmdFailed;
+        return kStatus_Fail;
     }
 
     rawScr[0] = swap_be32(rawScr[0]);
     rawScr[1] = swap_be32(rawScr[1]);
     memcpy(card->rawScr, rawScr, sizeof(card->rawScr));
 
-    SD_DecodeScr(rawScr, card);
-
-    cardCmd = NULL;
-    return kStatus_SDMMC_NoError;
+    SD_DecodeScr(rawScr, card);    
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
@@ -631,43 +454,37 @@ static sdmmc_status_t SD_SendScr(sd_t *card)
  * Description: Switches high speed mode of the specific card
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_SwitchHighspeed(sd_t *card)
+static status_t SD_SwitchHighspeed(sd_card_t *card)
 {
     uint32_t response[16] = {0};
-    sdmmc_status_t err = kStatus_SDMMC_NoError;
     assert(card);
 
-    if ((card->version < SD_SPEC_VERSION_1_0)
-         || (!(card->csd.ccc & SD_CCC_SWITCH)))
+    if ((card->version < SD_SPEC_VERSION_1_0) || (!(card->csd.ccc & SD_CCC_SWITCH)))
     {
         return kStatus_SDMMC_CardNotSupport;
     }
 
-    err = SD_Switch(card, kSdSwitchCheck, 0, 1, response);
-    if (err)
+    if (kStatus_Success != SD_Switch(card, kSD_SwitchCheck, 0, 1, response))
     {
-        return err;
+        return kStatus_SDMMC_SwitchFailed;
     }
 
-    if ((!(swap_be32(response[3]) & 0x10000)) ||
-        ((swap_be32(response[4]) & 0x0f000000) == 0x0F000000))
+    if ((!(swap_be32(response[3]) & 0x10000)) || ((swap_be32(response[4]) & 0x0f000000) == 0x0F000000))
     {
         return kStatus_SDMMC_CardNotSupport;
     }
 
-    err = SD_Switch(card, kSdSwitchSet, 0, 1, response);
-    if (err)
+    if (kStatus_Success != SD_Switch(card, kSD_SwitchSet, 0, 1, response))
     {
-        return err;
+        return kStatus_SDMMC_SwitchFailed;
     }
 
     if ((swap_be32(response[4]) & 0x0f000000) != 0x01000000)
     {
-        err = kStatus_SDMMC_SwitchFunctionCmdFailed;
+        return kStatus_SDMMC_CardNotSupport;
     }
 
-    return err;
-
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
@@ -676,39 +493,32 @@ static sdmmc_status_t SD_SwitchHighspeed(sd_t *card)
  * Description: Sets desired buswidth
  *
  *END*********************************************************************/
-static uint32_t SD_SetBusWidth(sd_t *card, sd_bus_width_t busWidth)
+static uint32_t SD_SetBusWidth(sd_card_t *card, sd_bus_width_t busWidth)
 {
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    sdmmc_status_t err = kStatus_SDMMC_NoError;
-    card_cmd_t command = {0};
+    sdhc_host_t *host;
+    sdhc_cmd_t command = {0};
     assert(card);
 
-    cardCmd = &command;
-    err = SD_SendApplicationCmd(card);
-    if (err != kStatus_SDMMC_NoError)
+    host = card->host;
+    
+    if (kStatus_Success != SD_SendApplicationCmd(card))
     {
-        cardCmd = NULL;
-        return err;
+        return kStatus_SDMMC_SendAppCmdFailed;
     }
 
-    cardCmd->cmdIndex = kSdAppSetBusWdith;
-    cardCmd->respType = kSdmmcRespTypeR1;
-    cardCmd->argument = busWidth;
+    command.index = kSD_AppSetBusWdith;
+    command.responseType = kSDHC_ReponseTypeR1;
+    command.argument = busWidth;
 
-    host->currentCmd = cardCmd;
+    host->currentCmd = &command;
     host->currentData = 0;
 
-    if (kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)
-        || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd)))
+    if (kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT) || (!SDMMC_R1_ERROR_BITS(command->response[0])))
     {
-        cardCmd = NULL;
-        return kStatus_SDMMC_SendCardCmdFailed;
+        return kStatus_SDMMC_SendCommandFailed;
     }
-
-    cardCmd = NULL;
-    return err;
+    
+    return kStatus_Success;
 }
 
 
@@ -719,140 +529,133 @@ static uint32_t SD_SetBusWidth(sd_t *card, sd_bus_width_t busWidth)
  * Description: Gets csd from card
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_SendCsd(sd_t * card)
+static status_t SD_SendCsd(sd_card_t * card)
 {
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    card_cmd_t command = {0};
+    sdhc_host_t *host;
+    sdhc_cmd_t command = {0};
     assert(card);
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdmmcSendCsd;
-    cardCmd->argument = card->rca << 16;
-    cardCmd->respType = kSdmmcRespTypeR2;
+    host = card->host;
+    
+    command.index = kSDMMC_SendCsd;
+    command.argument = card->rca << 16;
+    command.responseType = kSDHC_ReponseTypeR2;
 
-    host->currentCmd = cardCmd;
+    host->currentCmd = &command;
     host->currentData = 0;
 
-    if (kStatus_SDMMC_NoError == 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+    if (kStatus_Success == SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
     {
-        memcpy(card->rawCsd, cardCmd->response, sizeof(card->rawCsd));
-        /*The response is from bit 127:8 in R2, corrisponding to cardCmd->response[3]
-        :cardCmd->response[0][31:8]*/
-        SD_DecodeCsd(cardCmd->response, card);
-        cardCmd = NULL;
-        return kStatus_SDMMC_NoError;
+        memcpy(card->rawCsd, command->response, sizeof(card->rawCsd));
+        /* The response is from bit 127:8 in R2, corrisponding to command->response[3]:command->response[0][31:8]. */
+        SD_DecodeCsd(command->response, card);
+    
+        return kStatus_Success;
     }
 
-    cardCmd = NULL;
-    return kStatus_SDMMC_SendCardCmdFailed;
+    return kStatus_SDMMC_SendCommandFailed;
 }
 
 /*FUNCTION****************************************************************
  *
  * Function Name: SD_AllSendCid
- * Description: Sends all_send_cid command
+ * Description: Sends all_send_cid commandMemory
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_AllSendCid(sd_t *card)
+static status_t SD_AllSendCid(sd_card_t *card)
 {
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    card_cmd_t command = {0};
-    assert(host);
+    sdhc_host_t *host;
+    sdhc_cmd_t command = {0};
     assert(card);
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdmmcAllSendCid;
-    cardCmd->argument = 0;
-    cardCmd->respType = kSdmmcRespTypeR2;
+    host = card->host;
+    
+    command.index = kSDMMC_AllSendCid;
+    command.argument = 0;
+    command.responseType = kSDHC_ReponseTypeR2;
 
-    host->currentCmd = cardCmd;
+    host->currentCmd = &command;
     host->currentData = 0;
 
-    if (kStatus_SDMMC_NoError == 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+    if (kStatus_Success == SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
     {
-        memcpy(card->rawCid, cardCmd->response, sizeof(card->rawCid));
-        SD_DecodeCid(cardCmd->response, card);      
-        cardCmd = NULL;
-        return kStatus_SDMMC_NoError;
+        memcpy(card->rawCid, command->response, sizeof(card->rawCid));
+        SD_DecodeCid(command->response, card);      
+        
+        return kStatus_Success;
     }
-
-    cardCmd = NULL;
-    return kStatus_SDMMC_SendCardCmdFailed;
+    
+    return kStatus_SDMMC_SendCommandFailed;
 }
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SD_Init
+ * Function Name: SD_InitCard
  * Description: Initializes SD memory card
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_Init(sd_t *card)
+static status_t SD_InitCard(sd_card_t *card)
 {
+    sdhc_sd_clock_config_t sdClockConfig = {0};
+    status_t err;
     assert(card);
-
-    sdmmc_status_t err = kStatus_SDMMC_NoError;
-
-    if (kStatus_SDMMC_NoError != SD_AllSendCid(card))
+    
+    if (kStatus_Success != SD_AllSendCid(card))
     {
-        return kStatus_SDMMC_AllSendCidCmdFailed;
+        return kStatus_SDMMC_AllSendCidFailed;
+    }
+    
+    if (kStatus_Success != SD_SendRca(card))
+    {
+        return kStatus_SDMMC_SendRcaFailed;
     }
 
-    if (kStatus_SDMMC_NoError != SD_SendRca(card))
+    if (kStatus_Success != SD_SendCsd(card))
     {
-        return kStatus_SDMMC_SendRcaCmdFailed;
+        return kStatus_SDMMC_SendCsdFailed;
+    }
+    
+    if (kStatus_Success != SD_SelectCard(card, true))
+    {
+        return kStatus_SDMMC_SelectCardFailed;
+    }
+ 
+    if (kStatus_Success != SD_SendScr(card))
+    {
+        return kStatus_SDMMC_SendScrFailed;
     }
 
-    if (kStatus_SDMMC_NoError != SD_SendCsd(card))
-    {
-        return kStatus_SDMMC_SendCsdCmdFailed;
-    }
+    sdClockConfig.enableSdClock = true;
+    sdClockConfig.baseClockFreq = host->capability->sourceClockFreq;
+    sdClockConfig.sdClockFreq = SD_CLK_25MHZ;    
+    SDHC_SetSdClockConfig(host->base, &sdClockConfig);
 
-    if (kStatus_SDMMC_NoError != SD_SelectCard(card, true))
+    if (DOES_SDHC_SUPPORT_4BITS(card->host) && DOES_SD_SUPPORT_4BITS(card))
     {
-        return kStatus_SDMMC_SelectCardCmdFailed;
-    }
-
-    if (kStatus_SDMMC_NoError != SD_SendScr(card))
-    {
-        return kStatus_SDMMC_SendScrCmdFailed;
-    }
-
-    if (kStatus_SDMMC_NoError != SDMMC_ConfigClock(card->host, SD_CLK_25MHZ))
-    {
-        return kStatus_SDMMC_SetCardBusClockFailed;
-    }
-
-    if (DOES_HOST_SUPPORT_4BITS(card->host) && DOES_CARD_SUPPORT_4BITS(card))
-    {
-        if (kStatus_SDMMC_NoError != SD_SetBusWidth(card, kSdBusWidth4Bit))
+        if (kStatus_Success != SD_SetBusWidth(card, kSD_BusWidth4Bit))
         {
-            return kStatus_SDMMC_SetBusWidthCmdFailed;
+            return kStatus_SDMMC_SetBusWidthFailed;
         }
-        SDMMC_SetHostBusWidth(card->host, kSdhcDtw4Bit);
+        SDHC_SetDataTransferWidth(card->host->base, kSDHCDtw4Bit);
     }
 
-    //if (card->host->capability->supportMask & SDHC_SUPPORT_HIGHSPEED)
-    if (DOES_HOST_SUPPORT_HIGHSPEED(card->host))
+    if (DOES_SDHC_SUPPORT_HIGHSPEED(card->host))
     {
         err = SD_SwitchHighspeed(card);
-        if ((err != kStatus_SDMMC_NoError) && (kStatus_SDMMC_CardNotSupport != err))
+        if ((err != kStatus_Success) && (kStatus_SDMMC_CardNotSupport != err))
         {
-            return kStatus_SDMMC_SwitchFunctionCmdFailed;
+            return kStatus_SDMMC_SwitchFailed;
         }
-        else if (err == kStatus_SDMMC_NoError)
+        else if (err == kStatus_Success)
         { 
-            if (kStatus_SDMMC_NoError != SDMMC_ConfigClock(card->host, SD_CLK_50MHZ))
-            {
-                return kStatus_SDMMC_SetCardBusClockFailed;
-            }
+            sdClockConfig.enableSdClock = true;
+            sdClockConfig.baseClockFreq = host->capability->sourceClockFreq;
+            sdClockConfig.sdClockFreq = SD_CLK_50MHZ;    
+            SDHC_SetSdClockConfig(host->base, &sdClockConfig);
         }
-        else
+        else /* Not support is also OK. */
         {
-            err = kStatus_SDMMC_NoError;
+            err = kStatus_Success;
         }
     }
 
@@ -860,7 +663,8 @@ static sdmmc_status_t SD_Init(sd_t *card)
     {
         err = kStatus_SDMMC_SetCardBlockSizeFailed;
     }
-    return err;
+    
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
@@ -870,55 +674,51 @@ static sdmmc_status_t SD_Init(sd_t *card)
  * card to send its operating condition register content.
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_AppSendOpCond(sd_t *card, uint32_t acmd41Arg)
+static status_t SD_AppSendOpCond(sd_card_t *card, uint32_t acmd41Arg)
 {
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    sdmmc_status_t err;
+    
+    sdhc_host_t *host;
+    sdhc_cmd_t command = {0};
+    status_t err;
     uint32_t i = FSL_CARD_MAX_VOLT_RETRIES;
-    card_cmd_t command = {0};
-    assert(host);
     assert(card);
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdAppSendOpCond;
-    cardCmd->argument = acmd41Arg;
-    cardCmd->respType = kSdmmcRespTypeR3;
+    host = card->host;
+    
+    command.index = kSD_AppSendOpCond;
+    command.argument = acmd41Arg;
+    command.responseType = kSDHC_ReponseTypeR3;
     
     while (i--)
     {
-        err = SD_SendApplicationCmd(card);
-        if (err != kStatus_SDMMC_NoError)
+        if (kStatus_Success != SD_SendApplicationCmd(card))
         {
-            cardCmd = NULL;
-            return err;
+            return kStatus_SDMMC_SendAppCmdFailed;
         }
         
-        host->currentCmd = cardCmd;
+        host->currentCmd = &command;
         host->currentData = 0;
 
-        if (kStatus_SDMMC_NoError != 
-            SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+        if (kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
         {
-            cardCmd = NULL;
-            return err;
+            return kStatus_SDMMC_SendCommandFailed;
         }
 
-        if (cardCmd->response[0] & SDMMC_CARD_BUSY)
+        if (command->response[0] & SDMMC_CARD_BUSY)
         {
-            if (cardCmd->response[0] & SD_OCR_CCS)
+            if (command->response[0] & SD_OCR_CCS)
             {
-                card->caps |= SD_CARD_CAPS_HIGHCAPACITY;
+                card->caps |= SD_CAPS_HIGH_CAPACITY;
             }
-            err = kStatus_SDMMC_NoError;
-            card->ocr = cardCmd->response[0];
+            err = kStatus_Success;
+            card->ocr = command->response[0];
             break;
         }
-        err = kStatus_SDMMC_TimeoutError;
-        host->delayTimeMsec(1);
+
+        err = kStatus_Timeout;
+        SDMMC_DelayTimeMsec(1);
     }
 
-    cardCmd = NULL;
     return err;
 }
 
@@ -929,34 +729,32 @@ static sdmmc_status_t SD_AppSendOpCond(sd_t *card, uint32_t acmd41Arg)
  * voltage information and asks the card whether card supports voltage.
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_SendIfCond(sd_t *card)
+static status_t SD_SendIfCond(sd_card_t *card)
 {
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    sdmmc_status_t err = kStatus_SDMMC_NoError;
-    card_cmd_t command = {0};
+    sdhc_host_t *host;
+    sdhc_cmd_t command = {0};
+    status_t err = ;
     assert(card);
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdSendIfCond;
-    cardCmd->argument = 0x1AA;
-    cardCmd->respType = kSdmmcRespTypeR7;
+    host = card->host;
+    
+    command.index = kSD_SendIfCond;
+    command.argument = 0x1AA;
+    command.responseType = kSDHC_ReponseTypeR7;
 
-    card->host->currentCmd = cardCmd;
+    host->currentCmd = &command;
     host->currentData = 0;
 
-    if (kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+    if (kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
     {
-        err = kStatus_SDMMC_SendCardCmdFailed;
+        return kStatus_SDMMC_SendCommandFailed;
     }
-    else if ((cardCmd->response[0] & 0xFF) != 0xAA)
+    else if ((command->response[0] & 0xFF) != 0xAA)
     {
-        err = kStatus_SDMMC_CardNotSupport;
+        return kStatus_SDMMC_CardNotSupport;
     }
-
-    cardCmd = NULL;
-    return err;
+  
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
@@ -965,71 +763,68 @@ static sdmmc_status_t SD_SendIfCond(sd_t *card)
  * Description: Reads data from specific SD card
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_Read(sd_t *card, uint8_t *buffer, uint32_t startBlock,
-                     uint32_t blockSize, uint32_t blockCount)
+static status_t SD_Read(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, uint32_t blockSize, 
+                uint32_t blockCount)
 {
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    card_data_t cardData = {0};
-    card_cmd_t command = {0};
+    sdhc_host_t *host;
+    sdhc_cmd_t command = {0};
+    sdhc_data_t data = {0};
     assert(card);
     assert(buffer);
     assert(blockCount);
     assert(blockSize);
     assert(blockSize == FSL_CARD_DEFAULT_BLOCK_SIZE);
 
-    if ((IS_HIGHCAPACITY_CARD(card) && (blockSize != 512))
-         || (blockSize > card->blockSize)
-         || (blockSize > card->host->capability->maxBlockLength)
-         || (blockSize % 4))
+    host = card->host;
+
+    if ((IS_SD_HIGH_CAPACITY(card) && (blockSize != 512)) || (blockSize > card->blockSize)
+         || (blockSize > host->capability->maxBlockLength) || (blockSize % 4))
     {
-        return kStatus_SDMMC_BlockSizeHostNotSupport;
+        return kStatus_SDMMC_CardNotSupport;
     }
 
-    cardData.blockSize = blockSize;
-    cardData.blockCount = blockCount;
-    cardData.buffer = (uint32_t *)buffer;
-    cardData.flags |= CARD_DATA_FLAGS_DATA_READ;
+    data.blockSize = blockSize;
+    data.blockCount = blockCount;
+    data.buffer = (uint32_t *)buffer;
+    data.flags |= CARD_DATA_FLAGS_DATA_READ;
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdmmcReadMultipleBlock;
-    if (cardData.blockCount == 1)
+    command.index = kSDMMC_ReadMultipleBlock;
+    if (data.blockCount == 1)
     {
-        cardCmd->cmdIndex = kSdmmcReadSingleBlock;
+        command.index = kSDMMC_ReadSingleBlock;
     }
-    cardCmd->argument = startBlock;
-    if (!IS_HIGHCAPACITY_CARD(card))
+    command.argument = startBlock;
+    if (!IS_SD_HIGH_CAPACITY(card))
     {
-        cardCmd->argument *= cardData.blockSize;
+        command.argument *= data.blockSize;
     }
-    cardCmd->respType = kSdmmcRespTypeR1;
+    command.responseType = kSDHC_ReponseTypeR1;
 
-    host->currentCmd = cardCmd;
-    host->currentData = &cardData;
+    host->currentCmd = &command;
+    host->currentData = &data;
 
-    if ((kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
-        || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd))
-        || (kStatus_SDMMC_NoError != 
-            SDMMC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))
+    if ((kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)) || (!SDMMC_R1_ERROR_BITS(command->response[0]))
+        || (kStatus_Success != SDHC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))
     {
-        cardCmd = NULL;
-        return kStatus_SDMMC_SendCardCmdFailed;
+        return kStatus_Fail;
     }
 
-#if ! defined BSP_FSL_SDHC_ENABLE_AUTOCMD12
-    if (cardData.blockCount > 1)
+    if (host->flags & SDHC_FLAGS_USE_AUTO_CMD12)
     {
-        if (kStatus_SDMMC_NoError != SD_StopTransmission(card))
+        if (data.blockCount > 1)
         {
-            cardCmd = NULL;
-            return kStatus_SDMMC_StopTransmissionCmdFailed;
+            if (host->sdhcConfig.enableAutoCMD12)
+            {
+                if (kStatus_Success != SD_StopTransmission(card))
+                { 
+                    return kStatus_SDMMC_StopTransmissionFailed;
+                }
+            }
+           
         }
     }
-#endif
-
-    cardCmd = NULL;
-    return kStatus_SDMMC_NoError;
+    
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
@@ -1038,75 +833,64 @@ static sdmmc_status_t SD_Read(sd_t *card, uint8_t *buffer, uint32_t startBlock,
  * Description: Writes data from specific card
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_Write(sd_t *card, uint8_t *buffer, uint32_t startBlock,
-                      uint32_t blockSize, uint32_t blockCount)
+static status_t SD_Write(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, uint32_t blockSize, 
+                uint32_t blockCount)
 {
-    host_t *host = card->host;
-    card_cmd_t *cardCmd = 0;
-    card_data_t cardData = {0};
-    card_cmd_t command = {0};
+    sdhc_host_t *host;
+    sdhc_cmd_t command = {0};
+    sdhc_data_t data = {0};
     assert(card);
     assert(buffer);
     assert(blockCount);
     assert(blockSize);
     assert(blockSize == FSL_CARD_DEFAULT_BLOCK_SIZE);
 
-    if ((IS_HIGHCAPACITY_CARD(card) && (blockSize != 512))
-         || (blockSize > card->blockSize)
-         || (blockSize > card->host->capability->maxBlockLength)
-         || (blockSize % 4))
+    host = card->host;
+
+    if ((IS_SD_HIGH_CAPACITY(card) && (blockSize != 512)) || (blockSize > card->blockSize)
+         || (blockSize > host->capability->maxBlockLength) || (blockSize % 4))
     {
-        return kStatus_SDMMC_BlockSizeHostNotSupport;
+        return kStatus_SDMMC_CardNotSupport;
     }
 
-    cardData.blockSize = blockSize;
-    cardData.blockCount = blockCount;
-    cardData.buffer = (uint32_t *)buffer;
-
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdmmcWriteMultipleBlock;
-    if (cardData.blockCount == 1)
+    data.blockSize = blockSize;
+    data.blockCount = blockCount;
+    data.buffer = (uint32_t *)buffer;
+    
+    command.index = kSDMMC_WriteMultipleBlock;
+    if (data.blockCount == 1)
     {
-        cardCmd->cmdIndex = kSdmmcWriteBlock;
+        command.index = kSDMMC_WriteBlock;
     }
-    cardCmd->argument = startBlock;
-    if (!IS_HIGHCAPACITY_CARD(card))
+    command.argument = startBlock;
+    if (!IS_SD_HIGH_CAPACITY(card))
     {
-        cardCmd->argument *= cardData.blockSize;
+        command.argument *= data.blockSize;
     }
-    cardCmd->respType = kSdmmcRespTypeR1;
+    command.responseType = kSDHC_ReponseTypeR1;
 
-    host->currentCmd = cardCmd;
-    host->currentData = &cardData;
+    host->currentCmd = &command;
+    host->currentData = &data;
 
-    if ((kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
-        || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd))
-        || (kStatus_SDMMC_NoError != 
-            SDMMC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))
+    if ((kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+        || (!SDMMC_R1_ERROR_BITS(command->response[0]))
+        || (kStatus_Success != SDHC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))
     {
-        cardCmd = NULL;
-        return kStatus_SDMMC_SendCardCmdFailed;
+        return kStatus_Fail;
     }
 
-    if (cardData.blockCount > 1)
+    if (data.blockCount > 1)
     {
-#if ! defined FSL_CARD_DRIVER_ENABLE_HOST_AUTOCMD12
-        if (kStatus_SDMMC_NoError != SD_StopTransmission(card))
+        if (host->sdhcConfig.enableAutoCMD12)
         {
-            cardCmd = NULL;
-            return kStatus_SDMMC_StopTransmissionCmdFailed;
-        }
-#endif
-        if (kStatus_SDMMC_NoError != SD_SendStatus(card))
-        {
-            cardCmd = NULL;
-            return kStatus_SDMMC_SendStatusCmdFailed;
+            if (kStatus_Success != SD_StopTransmission(card))
+            {
+                return kStatus_SDMMC_StopTransmissionFailed;
+            }
         }
     }
-
-    cardCmd = NULL;
-    return kStatus_SDMMC_NoError;
+    
+    return kStatus_Success;
 }
 
 /*FUNCTION****************************************************************
@@ -1115,70 +899,63 @@ static sdmmc_status_t SD_Write(sd_t *card, uint8_t *buffer, uint32_t startBlock,
  * Description: Erases data for the given block range
  *
  *END*********************************************************************/
-static sdmmc_status_t SD_Erase(sd_t *card, uint32_t startBlock, uint32_t blockCount)
+static status_t SD_Erase(sd_card_t *card, uint32_t startBlock, uint32_t blockCount)
 {
-    host_t *host = card->host;
+    sdhc_host_t *host;
     uint32_t s, e;
-    card_cmd_t *cardCmd = 0;
-    card_cmd_t command = {0};
+    sdhc_cmd_t command = {0};
     assert(card);
     assert(blockCount);
 
+    host = card->host;
+
     s = startBlock;
     e = s + blockCount - 1;
-    if (!IS_HIGHCAPACITY_CARD(card))
+    if (!IS_SD_HIGH_CAPACITY(card))
     {
         s = s * FSL_CARD_DEFAULT_BLOCK_SIZE;
         e = e * FSL_CARD_DEFAULT_BLOCK_SIZE;
     }
+    
+    command.index = kSD_EraseWrBlkStart;
+    command.argument = s;
+    command.responseType = kSDHC_ReponseTypeR1;
 
-    cardCmd = &command;
-    cardCmd->cmdIndex = kSdEraseWrBlkStart;
-    cardCmd->argument = s;
-    cardCmd->respType = kSdmmcRespTypeR1;
-
-    host->currentCmd = cardCmd;
+    host->currentCmd = &command;
     host->currentData = 0;
 
-    if (kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT)
-            || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd)))
+    if (kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT) 
+        || (!SDMMC_R1_ERROR_BITS(command->response[0])))
     {
-        cardCmd = NULL;
-        return kStatus_SDMMC_SendCardCmdFailed;
+        return kStatus_Fail;
     }
 
-    cardCmd->cmdIndex = kSdEraseWrBlkEnd;
-    cardCmd->argument = e;
+    command.index = kSD_EraseWrBlkEnd;
+    command.argument = e;
     
-    host->currentCmd = cardCmd;
+    host->currentCmd = &command;
     host->currentData = 0;
 
-    if ((kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
-        || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd)))
-    {
-        cardCmd = NULL;
-        return kStatus_SDMMC_SendCardCmdFailed;
+    if ((kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+        || (!SDMMC_R1_ERROR_BITS(command->response[0])))
+    { 
+        return kStatus_Fail;
     }
 
-    cardCmd->cmdIndex = kSdmmcErase;
-    cardCmd->argument = 0;
-    cardCmd->respType = kSdmmcRespTypeR1b;
+    command.index = kSDMMC_Erase;
+    command.argument = 0;
+    command.responseType = kSDHC_ReponseTypeR1b;
     
-    host->currentCmd = cardCmd;
+    host->currentCmd = &command;
     host->currentData = 0;
     
-    if ((kStatus_SDMMC_NoError != 
-        SDMMC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
-        || (kStatus_SDMMC_NoError != SDMMC_CheckR1Response(cardCmd)))
+    if ((kStatus_Success != SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT))
+        || (!SDMMC_R1_ERROR_BITS(command->response[0])))
     {
-        cardCmd = NULL;
-        return kStatus_SDMMC_SendCardCmdFailed;
+        return kStatus_Fail;
     }
 
-    cardCmd = NULL;
-    return kStatus_SDMMC_NoError;
+    return kStatus_Success;
 }
 
 
@@ -1188,7 +965,7 @@ static sdmmc_status_t SD_Erase(sd_t *card, uint32_t startBlock, uint32_t blockCo
  * Description: Decodes scr register
  *
  *END*********************************************************************/
-static void SDMMC_DecodeScr(uint32_t *rawScr, sd_t *card)
+static void SDMMC_DecodeScr(uint32_t *rawScr, sd_card_t *card)
 {
     sd_scr_t *scr;
     assert(rawScr);
@@ -1231,7 +1008,7 @@ static void SDMMC_DecodeScr(uint32_t *rawScr, sd_t *card)
     }
     if (card->scr.sdBusWidths & SD_SCR_BUS_WIDTHS_4BIT)
     {
-        card->caps |= SD_CARD_CAPS_BUSWIDTH_4BITS;
+        card->caps |= SD_CAPS_BUS_WIDTH_4BITS;
     }
 }
 
@@ -1239,69 +1016,68 @@ static void SDMMC_DecodeScr(uint32_t *rawScr, sd_t *card)
 
 /*FUNCTION****************************************************************
  *
- * Function Name: SD_IndentifyCard
+ * Function Name: SD_Init
  * Description: Identifies card on the given host controller
  *
  *END*********************************************************************/
-sdmmc_status_t SD_IndentifyCard(host_t *host, sd_t *card)
+status_t SD_Init(sd_card_t *card)
 {
-    sdmmc_status_t err = kStatus_SDMMC_NoError;
+    status_t err = kStatus_Success;
+    sdhc_host_t *host;
+    sdhc_sd_clock_config_t sdClockConfig = {0};
     uint32_t acmd41Arg = 0;
     assert(card);
-    assert(host);
+    assert(card->host);
 
-    card->host = host;
+    host = card->host;
 
-    if (SDMMC_ConfigClock(card->host, SDMMC_CLK_400KHZ))
+    sdClockConfig.enableSdClock = true;
+    sdClockConfig.baseClockFreq = host->capability->sourceClockFreq;
+    sdClockConfig.sdClockFreq = SDMMC_CLK_400KHZ;    
+    SDHC_SetSdClockConfig(host->base, &sdClockConfig);
+    
+    if (kStatus_Success != SD_GoIdle(card))
     {
-        return kStatus_SDMMC_SetCardBusClockFailed;
-    }
-
-    err = SD_GoIdle(card);
-    if (err)
-    {
-        return kStatus_SDMMC_GoIdleCmdFailed;
+        return kStatus_SDMMC_GoIdleFailed;
     }
 
     if ((host->capability->supportMask) & SDHC_SUPPORT_V330)
     {
         acmd41Arg |= SD_OCR_VDD_32_33 | SD_OCR_VDD_33_34;
     }
-#if defined SDHC_SUPPORT_V300
+#if defined FSL_FEATURE_SDHC_HAS_V300_SUPPORT && FSL_FEATURE_SDHC_HAS_V300_SUPPORT
     if ((host->capability->supportMask) & SDHC_SUPPORT_V300)
     {
         acmd41Arg |= SD_OCR_VDD_29_30;
     }
 #endif
-    err = SD_SendIfCond(card);
-    if (err == kStatus_SDMMC_NoError)
+    if (kStatus_Success == SD_SendIfCond(card))
     {
         /* SDHC or SDXC card */
         acmd41Arg |= SD_OCR_HCS;
-        card->caps |= SD_CARD_CAPS_SDHC;
+        card->caps |= SD_CAPS_SDHC;
     }
     else
     {
         /* SDSC card */
-        err = SD_GoIdle(card);
-        if (err)
+        if (kStatus_Success != SD_GoIdle(card))
         {
-            return kStatus_SDMMC_GoIdleCmdFailed;
+            return kStatus_SDMMC_GoIdleFailed;
         }
     }
 
     err = SD_AppSendOpCond(card, acmd41Arg);
-    if (kStatus_SDMMC_TimeoutError == err)
+    if (kStatus_Timeout == err)
     {
         /* MMC card */
         return kStatus_SDMMC_NotSupportYet;
     }
     else if (err)
     {
-        return kStatus_SDMMC_SendOpCondCmdFailed;
+        return kStatus_SDMMC_SendOpCondFailed;
     }
 
-    return SD_Init(card);
+    return SD_InitCard(card);
 }
              
 /*FUNCTION****************************************************************
@@ -1310,16 +1086,16 @@ sdmmc_status_t SD_IndentifyCard(host_t *host, sd_t *card)
  * Description: Reads blocks from card with default block size from SD or MMC card
  *
  *END*********************************************************************/
-sdmmc_status_t SD_ReadBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock,
-                    uint32_t blockCount)
+status_t SD_ReadBlocks(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, uint32_t blockCount)
 {
     uint32_t blkCnt, blkLeft, blkDone;
-    sdmmc_status_t err = kStatus_SDMMC_NoError;
-
+    status_t err = kStatus_Success;
+    sdhc_host_t *host;
     assert(card);
     assert(buffer);
     assert(blockCount);
 
+    host = card->host;
     blkLeft = blockCount;
     blkDone = 0;
 
@@ -1330,10 +1106,10 @@ sdmmc_status_t SD_ReadBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock,
 
     while(blkLeft)
     {
-        if (blkLeft > card->host->capability->maxBlockLength)
+        if (blkLeft > host->capability->maxBlockLength)
         {
-            blkLeft = blkLeft - card->host->capability->maxBlockLength;
-            blkCnt = card->host->capability->maxBlockLength;
+            blkLeft = blkLeft - host->capability->maxBlockLength;
+            blkCnt = host->capability->maxBlockLength;
         }
         else
         {
@@ -1341,12 +1117,9 @@ sdmmc_status_t SD_ReadBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock,
             blkLeft = 0;
         }
 
-        err = SD_Read(card,
-                      buffer + blkDone * FSL_CARD_DEFAULT_BLOCK_SIZE,
-                      startBlock + blkDone,
-                      FSL_CARD_DEFAULT_BLOCK_SIZE,
-                      blkCnt);
-        if (err != kStatus_SDMMC_NoError)
+        err = SD_Read(card, buffer + blkDone * FSL_CARD_DEFAULT_BLOCK_SIZE, startBlock + blkDone,
+                      FSL_CARD_DEFAULT_BLOCK_SIZE, blkCnt);
+        if (err != kStatus_Success)
         {
             return err;
         }
@@ -1362,15 +1135,16 @@ sdmmc_status_t SD_ReadBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock,
  * Description: Writes blocks to card with default block size to SD/MMC card
  *
  *END*********************************************************************/
-sdmmc_status_t SD_WriteBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock,
-                     uint32_t blockCount)
+status_t SD_WriteBlocks(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, uint32_t blockCount)
 {
     uint32_t blkCnt, blkLeft, blkDone;
-    sdmmc_status_t err = kStatus_SDMMC_NoError;
+    status_t err = kStatus_Success;
+    sdhc_host_t *host;
     assert(card);
     assert(buffer);
     assert(blockCount);
 
+    host = card->host;
     blkLeft = blockCount;
     blkDone = 0;
 
@@ -1381,10 +1155,10 @@ sdmmc_status_t SD_WriteBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock,
 
     while(blkLeft)
     {
-        if (blkLeft > card->host->capability->maxBlockLength)
+        if (blkLeft > host->capability->maxBlockLength)
         {
-            blkLeft = blkLeft - card->host->capability->maxBlockLength;
-            blkCnt = card->host->capability->maxBlockLength;
+            blkLeft = blkLeft - host->capability->maxBlockLength;
+            blkCnt = host->capability->maxBlockLength;
         }
         else
         {
@@ -1392,12 +1166,9 @@ sdmmc_status_t SD_WriteBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock,
             blkLeft = 0;
         }
 
-        err = SD_Write(card,
-                          buffer + blkDone * FSL_CARD_DEFAULT_BLOCK_SIZE,
-                          startBlock + blkDone,
-                          FSL_CARD_DEFAULT_BLOCK_SIZE,
-                          blkCnt);
-        if (err != kStatus_SDMMC_NoError)
+        err = SD_Write(card, buffer + blkDone * FSL_CARD_DEFAULT_BLOCK_SIZE, startBlock + blkDone,
+                          FSL_CARD_DEFAULT_BLOCK_SIZE, blkCnt);
+        if (err != kStatus_Success)
         {
             return err;
         }
@@ -1413,7 +1184,7 @@ sdmmc_status_t SD_WriteBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock,
  * Description: Erases block range from SD/MMC card with default block size
  *
  *END*********************************************************************/
-sdmmc_status_t SD_EraseBlocks(sd_t *card, uint32_t startBlock, uint32_t blockCount)
+status_t SD_EraseBlocks(sd_card_t *card, uint32_t startBlock, uint32_t blockCount)
 {
     uint32_t blkDone = 0, blkLeft, blkCnt;
 
@@ -1434,18 +1205,14 @@ sdmmc_status_t SD_EraseBlocks(sd_t *card, uint32_t startBlock, uint32_t blockCou
             blkLeft = 0;
         }
 
-        if (kStatus_SDMMC_NoError != SD_Erase(card,
-                                              startBlock + blkDone,
-                                              blkCnt))
+        if (kStatus_Success != SD_Erase(card, startBlock + blkDone, blkCnt))
         {
-            return kStatus_SDMMC_EraseCmdFailed;
+            return kStatus_SDMMC_EraseFailed;
         }
 
         blkDone += blkCnt;
     }
-    return kStatus_SDMMC_NoError;
+    
+    return kStatus_Success;
 }
 
-/*************************************************************************************************
- * EOF
- ************************************************************************************************/

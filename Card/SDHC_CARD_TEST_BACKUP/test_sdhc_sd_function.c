@@ -11,7 +11,7 @@
 #include "card_test_function.h"
 
 
-#define TEST_BLOCK_NUM 8
+#define TEST_BLOCK_NUM 1
 #define TEST_START_BLOCK        4U
 #define LOOPS 100
 static uint8_t g_refData[FSL_CARD_DEFAULT_BLOCK_SIZE*TEST_BLOCK_NUM];
@@ -34,12 +34,12 @@ static const uint32_t g_transpeeed_time_value[] = {0U, 10U, 12U, 13U, 15U, 20U, 
   25U, 30U, 35U, 40U, 45U, 50U, 55U, 60U, 70U, 80U};
 
 /* Host controller instance number */
-#define HOST_INSTANCE 0
+#define SDHC_INSTANCE 0
 #define CD_USING_GPIO
 
-static host_t g_host = {0};
+static sdhc_host_t g_host = {0};
 static sd_t g_sd = {0};
-static host_capability_t g_hostCapability; 
+static sdhc_capability_t g_sdhcCapability; 
 #define ADMA_TABLE_MAX_ENTRIES 2
 static uint32_t g_admaTable[ADMA_TABLE_MAX_ENTRIES];
 
@@ -51,10 +51,15 @@ PORT_Type * const g_portBase[PORT_INSTANCE_COUNT] = PORT_BASE_PTRS;
 const IRQn_Type g_portIrqId[PORT_INSTANCE_COUNT] = PORT_IRQS;
 //#endif
 
-#if defined FSL_CARD_DRIVER_USING_IRQ
+/*void SDHC_IRQHandler(void)
+{
+    SDHC_ClearIntFlags(&SDHC[0], SDHC_GetIntFlags(&SDHC[0]));;
+}*/
+
+#if defined FSL_SDHC_USING_IRQ
 void SDHC_IRQHandler(void)
 {
-    SDMMC_IrqHandler(&g_host);
+    SDHC_IrqHandler(&g_host);
 }
 #endif /* FSL_CARD_DRIVER_USING_IRQ */
 
@@ -65,7 +70,7 @@ void SDHC_IRQHandler(void)
 #define SDHC_D3_PIN       4
 #endif /* defined TWR_K64F120M */
 
-#if defined TWR_K60F120M
+#if defined TWR_K60D100M
 #define SDHC_CD_GPIO_PORT GPIOE_IDX
 #define SDHC_CD_GPIO_PIN  28
 #define SDHC_D3_PORT      GPIOE_IDX
@@ -90,7 +95,6 @@ void sdhc_cd_irqhandler(void)
 #endif
 }
 
-#if defined TWR_K64F120M
 void PORTB_IRQHandler()
 {
     if(PORT_HAL_GetPortIntFlag(PORTB) == (1<<SDHC_CD_GPIO_PIN))
@@ -100,10 +104,8 @@ void PORTB_IRQHandler()
     /* Clear interrupt flag.*/
     PORT_HAL_ClearPortIntFlag(PORTB);
 }  
-#endif /* defined TWR_K64F120M */
 
-#if defined TWR_K60F120M
-void PORTB_IRQHandler()
+void PORTE_IRQHandler()
 {
     if(PORT_HAL_GetPortIntFlag(PORTE) == (1<<SDHC_CD_GPIO_PIN))
     {
@@ -112,7 +114,7 @@ void PORTB_IRQHandler()
     /* Clear interrupt flag.*/
     PORT_HAL_ClearPortIntFlag(PORTE);
 }  
-#endif /* defined TWR_K60F120M */
+
 
 //#endif /* CD_USING_GPIO */
 
@@ -120,12 +122,12 @@ static uint32_t set_sdhc_pin_mux()
 {
     PORT_Type * portBase = g_portBase[SDHC_D3_PORT];
 
-    uint32_t instance = HOST_INSTANCE;
+    uint32_t instance = SDHC_INSTANCE;
     uint32_t err = 0;
 
     configure_sdhc_pins(instance);
 
-    switch(instance)
+ /* switch(instance)
     {
         case 0:
 #if defined (CD_USING_DAT3) || defined (CD_USING_POLL_DAT3)
@@ -142,7 +144,7 @@ static uint32_t set_sdhc_pin_mux()
         default:
             err = 1;
             break;
-    }
+    }*/
     return err;
 }
 
@@ -157,11 +159,11 @@ void init_hardware(void)
 
     set_sdhc_pin_mux();
 
-    /* Set current pin as gpio.*/
+    // Set current pin as gpio.
     PORT_HAL_SetMuxMode(portBase, SDHC_CD_GPIO_PIN, kPortMuxAsGpio);
-    /* Set current pin as digital input.*/
+    // Set current pin as digital input.
     GPIO_HAL_SetPinDir(gpioBase, SDHC_CD_GPIO_PIN, kGpioDigitalInput);
-    /* Configure GPIO input features. */
+    // Configure GPIO input features. 
 #if FSL_FEATURE_PORT_HAS_PULL_ENABLE
     PORT_HAL_SetPullCmd(portBase, SDHC_CD_GPIO_PIN, true);
 #endif
@@ -170,10 +172,11 @@ void init_hardware(void)
 #endif
 #if FSL_FEATURE_GPIO_HAS_INTERRUPT_VECTOR
     PORT_HAL_SetPinIntMode(portBase, SDHC_CD_GPIO_PIN, kPortIntEitherEdge);
-    /* Configure NVIC */
-        /* Enable GPIO interrupt.*/
+    // Configure NVIC 
+        // Enable GPIO interrupt.
     INT_SYS_EnableIRQ(g_portIrqId[SDHC_CD_GPIO_PORT]);
 #endif
+    
 }
 
 static uint32_t fill_reference_data(uint8_t *pdata, uint8_t seed, uint32_t len)
@@ -366,11 +369,11 @@ static void show_card_info(sd_t *card, bool showDetail)
 
     PRINTF("\r\n------- Card Information -------\r\n");
 
-    if (card->caps & SD_CARD_CAPS_SDHC)
+    if (card->caps & SD_CAPS_SDHC)
     {
         PRINTF("SDHC");
     }
-    else if (card->caps & SD_CARD_CAPS_SDXC)
+    else if (card->caps & SD_CAPS_SDXC)
     {
         PRINTF("SDXC");
     }
@@ -390,7 +393,7 @@ static void show_card_info(sd_t *card, bool showDetail)
     {
         PRINTF("%.02f MB\r\n", temp * 1000);
     }
-    PRINTF("Host Clock Max Rate: %d MHz\r\n", CLOCK_SYS_GetSdhcFreq(card->host->instance) / 1000000);
+    PRINTF("Host Clock Max Rate: %d MHz\r\n", CLOCK_SYS_GetSdhcFreq(0) / 1000000);
     //PRINTF("Clock Rate: %d MHz\r\n", card->host->targetClockFreq / 1000000);
 
     show_card_cid(&(card->cid));
@@ -401,7 +404,49 @@ static void show_card_info(sd_t *card, bool showDetail)
   //  }
 }
 
-bool test_card_detection(void)
+static bool test_card_common_init(sdhc_host_t *host, sd_t *sd, sdhc_host_user_config_t *configPtr)
+{
+       // SDHC_Type* base = &SDHC[SDHC_INSTANCE];
+    assert(configPtr);
+    
+    configPtr->base = &SDHC[SDHC_INSTANCE];
+    configPtr->cardDetectMode = kSdhcCardDetectGpio;
+    configPtr->transferMode = kSdhcTransModePio;
+    //configPtr->transferMode = kSdhcTransModeAdma1;
+    //configPtr->transferMode = kSdhcTransModeAdma2;
+    configPtr->capability = &g_sdhcCapability;
+    configPtr->admaTableAddress = g_admaTable;
+    configPtr->admaTableMaxEntries = ADMA_TABLE_MAX_ENTRIES;
+    configPtr->createCmdEvent = createCmdEvent;
+    configPtr->waitCmdEvent = waitCmdEvent;
+    configPtr->notifyCmdEvent = notifyCmdEvent;
+    configPtr->deleteCmdEvent = deleteCmdEvent;
+    configPtr->createDataEvent = createDataEvent;
+    configPtr->waitDataEvent = waitDataEvent;
+    configPtr->notifyDataEvent = notifyDataEvent;
+    configPtr->deleteDataEvent = deleteDataEvent;
+    configPtr->getCurrentTimeMsec = getCurrentTime;
+    configPtr->timeRangeMsec = getRangeTime();
+    configPtr->delayTimeMsec = delayTimeMsec;
+    if (kStatus_SDHC_NoError != SDHC_InitHost(host, configPtr))
+    {
+        return false;
+    }
+//while(1);
+//#if defined CD_USING_GPIO
+    /* createCardDetectEvent(); */
+//#endif
+    //
+   
+    if (kStatus_SDMMC_NoError != SD_IndentifyCard(host, sd))
+    {
+        return false;
+    }
+    
+    return true;
+}
+
+bool test_card_detection(sdhc_host_t *host, sd_t *sd)
 {
     uint32_t loop_time = 10, status;
     sdmmc_status_t ret = kStatus_SDMMC_NoError;
@@ -410,7 +455,7 @@ bool test_card_detection(void)
         if (g_sdInsertedFlag && (!g_sdInitFlag))
         {
             PRINTF("A card is detected\n\r");
-            ret = SD_IndentifyCard(&g_host, &g_sd);
+            ret = SD_IndentifyCard(host, sd);
             if (kStatus_SDMMC_NoError != ret)
             {
                 if (ret == kStatus_SDMMC_NotSupportYet)
@@ -421,7 +466,7 @@ bool test_card_detection(void)
                 {
                     PRINTF("SD_IndentifyCard failed\r\n");
                 }
-                SDMMC_DeInitHost(&g_host);
+                SDHC_DeInitHost(host);
                 return false;
             }
             g_sdInitFlag = 1;
@@ -437,7 +482,7 @@ bool test_card_detection(void)
             PRINTF("Card is removed\n\r");
         }
 #if defined CD_USING_GPIO
-         waitCardDetectEvent(FSL_HOST_WAIT_FOREVER);
+         waitCardDetectEvent(FSL_SDHC_WAIT_FOREVER);
 #else
         do
         {
@@ -447,7 +492,7 @@ bool test_card_detection(void)
                 g_sdInsertedFlag = 0;
                 break;
             }
-            status = SD_DetectCard(&g_host);
+            status = SD_DetectCard(host);
             if (status == kStatus_SDMMC_CardDetectNotSupportYet)
                 return false;
             delayTimeMsec(100);
@@ -461,43 +506,94 @@ bool test_card_detection(void)
     return true;
 }
 
-bool test_data_access(void)
+static bool test_card_power_consumption(sdhc_host_t *host, sd_t *sd)
 {
-    SDHC_Type* base = &SDHC[HOST_INSTANCE];
-    host_t *host = &g_host;
-    sd_t *sd = &g_sd;
-    uint32_t i, elapsed_ms, ms, current_ms, j;
-
-    host->instance = HOST_INSTANCE;
-    host->cardDetectMode = kSdmmcHostCardDetectGpio;
-    //host->transferMode = kSdmmcHostTransModePio;
-    //host->transferMode = kSdmmcHostTransModeAdma1;
-    host->transferMode = kSdmmcHostTransModeAdma2;
-    host->capability = &g_hostCapability;
-    host->admaTableAddress = g_admaTable;
-    host->admaTableMaxEntries = ADMA_TABLE_MAX_ENTRIES;
-    host->createCmdEvent = createCmdEvent;
-    host->waitCmdEvent = waitCmdEvent;
-    host->notifyCmdEvent = notifyCmdEvent;
-    host->deleteCmdEvent = deleteCmdEvent;
-    host->createDataEvent = createDataEvent;
-    host->waitDataEvent = waitDataEvent;
-    host->notifyDataEvent = notifyDataEvent;
-    host->deleteDataEvent = deleteDataEvent;
-    host->markStartTimeMsec = markStartTimeMsec;
-    host->getElapsedTimeMsec = getElapsedTimeMsec;
-    host->delayTimeMsec = delayTimeMsec;
-
-    SDMMC_InitHost(host);
-
-//#if defined CD_USING_GPIO
-    /* createCardDetectEvent(); */
-//#endif
-    if (kStatus_SDMMC_NoError != SD_IndentifyCard(host, sd))
+    uint32_t elapseTime = 0, i,j, lastTime, currentTime;
+    memset(g_refData, 1, sizeof(g_refData));
+    memset(g_testData, 1, sizeof(g_testData));
+    SDHC_BWR_SYSCTL_PEREN(&SDHC[0], 0);
+    SDHC_BWR_SYSCTL_HCKEN(&SDHC[0], 0);
+    SDHC_BWR_SYSCTL_IPGEN(&SDHC[0], 0);
+    //while(1);
+    while(1)
     {
-        return false;
+        //CLOCK_SYS_EnableSdhcClock(0);
+        
+        //SDHC_SET_SYSCTL(&SDHC[0], SDHC_SYSCTL_SDCLKEN_MASK);
+        /* Checks whether the SD clock is stable or not. */
+        //while(!SDHC_BRD_PRSSTAT_SDSTB(&SDHC[0])) {}
+        /* nables the SD clock. It should be disabled before changing the SD clock frequency. */
+        //SDHC_SET_SYSCTL(&SDHC[0], SDHC_SYSCTL_SDCLKEN_MASK);
+        //
+        /*lastTime = getCurrentTime();
+        for(i=0 ; i < 500; i++)
+        {*/
+            if (kStatus_SDMMC_NoError != SD_WriteBlocks(sd, g_refData, 2, TEST_BLOCK_NUM))
+            {
+                PRINTF("\n write blocks failed \n");
+                break;
+            }
+            memset(g_testData, 0, sizeof(g_testData));
+            if (kStatus_SDMMC_NoError != SD_ReadBlocks(sd, g_testData, 2, TEST_BLOCK_NUM))
+            {
+                PRINTF("\n read blocks failed \n");
+                break;
+            }
+            /*if (memcmp(g_testData, g_refData, FSL_CARD_DEFAULT_BLOCK_SIZE*TEST_BLOCK_NUM))
+            {
+                PRINTF("\n compared data failed \n");
+                break;
+            }*/
+            /*if (kStatus_SDMMC_NoError != SD_WriteBlocks(sd, g_testData, 2, TEST_BLOCK_NUM))
+            {
+                break;
+            }
+            if (kStatus_SDMMC_NoError != SD_ReadBlocks(sd, g_testData, 2, TEST_BLOCK_NUM))
+            {
+                break;
+            }*/
+       
+        //}
+        /*for (i = 0; i < FSL_CARD_DEFAULT_BLOCK_SIZE * TEST_BLOCK_NUM; i++)
+        {
+            if (g_testData[i] != g_refData[i])
+            {
+                break;
+            }
+        }*/
+        
+         /*if (memcmp(g_testData, g_refData, FSL_CARD_DEFAULT_BLOCK_SIZE * TEST_BLOCK_NUM))
+        {
+            break;
+        }*/
+        //currentTime = getCurrentTime();
+        //elapseTime = (currentTime - lastTime);
+        //elapseTime = getElapsedTimeMsec();
+        //CLOCK_SYS_DisableSdhcClock(0);
+        //while(1);
+        //delayTimeMsec(6000);
+        //lastTime = getCurrentTime();
+        //CLOCK_SYS_DisableSdhcClock(0);
+        /*for (i = 0; i < 4000; i++)
+        {
+            for (j = 0; j < 25000; j++);
+        }*/
+            //SoftDeley();
+    //CLOCK_SYS_EnableSdhcClock(0);
+    //
+   // CLOCK_SYS_DisableSdhcClock(0);
+ // while(1);
+  //__asm("WFI");
+        //currentTime = getCurrentTime();
+       // elapseTime = (currentTime - lastTime);
+       //PRINTF("\n first = %d\n", i);
     }
+    return true;
+}
 
+bool test_card_data_access(sdhc_host_t *host, sd_t *sd)
+{
+    uint32_t i, elapsed_ms, ms, last_ms, current_ms, j;
     if (SD_CheckReadOnly(sd))
     {
         PRINTF("Card is write-protected, skip writing tests\r\n");
@@ -507,7 +603,7 @@ bool test_data_access(void)
         {
             PRINTF("ERROR: SD_ReadBlocks failed, line %d\r\n", __LINE__);
             SD_Shutdown(sd);
-            SDMMC_DeInitHost(host);
+            SDHC_DeInitHost(host);
             return false;
         }
         PRINTF("Single block read test passed!\r\n");
@@ -517,12 +613,12 @@ bool test_data_access(void)
         {
             PRINTF("ERROR: SD_ReadBlocks failed, line %d\r\n", __LINE__);
             SD_Shutdown(sd);
-            SDMMC_DeInitHost(host);
+            SDHC_DeInitHost(host);
             return false;
         }
         PRINTF("multiple block read test passed!\r\n");
         SD_Shutdown(sd);
-        SDMMC_DeInitHost(host);
+        SDHC_DeInitHost(host);
         return false;
     }
 
@@ -530,7 +626,7 @@ bool test_data_access(void)
     {
         PRINTF("ERROR:SD_EraseBlocks failed, line %d\r\n", __LINE__);
         SD_Shutdown(sd);
-        SDMMC_DeInitHost(host);
+        SDHC_DeInitHost(host);
         return false;
     }
 
@@ -540,7 +636,7 @@ bool test_data_access(void)
     if (fill_reference_data(g_refData, 0x11, sizeof(g_refData))) {
         PRINTF("ERROR: prepare reference data failed\r\n");
         SD_Shutdown(sd);
-        SDMMC_DeInitHost(host);
+        SDHC_DeInitHost(host);
         return false;
     }
 
@@ -548,7 +644,7 @@ bool test_data_access(void)
     {
         PRINTF("ERROR: SD_WriteBlocks failed, line %d\r\n", __LINE__);
         SD_Shutdown(sd);
-        SDMMC_DeInitHost(host);
+        SDHC_DeInitHost(host);
         return false;
     }
 
@@ -556,7 +652,7 @@ bool test_data_access(void)
     {
         PRINTF("ERROR: SD_ReadBlocks failed, line %d\r\n", __LINE__);
         SD_Shutdown(sd);
-        SDMMC_DeInitHost(host);
+        SDHC_DeInitHost(host);
         return false;
     }
 
@@ -564,7 +660,7 @@ bool test_data_access(void)
     {
         PRINTF("ERROR: data comparison failed, line %d\r\n", __LINE__);
         SD_Shutdown(sd);
-        SDMMC_DeInitHost(host);
+        SDHC_DeInitHost(host);
         return false;
     }
     PRINTF("Single block read/write test passed!\r\n");
@@ -576,7 +672,7 @@ bool test_data_access(void)
         {
             PRINTF("ERROR: fill data failed, line %d\r\n", __LINE__);
             SD_Shutdown(sd);
-            SDMMC_DeInitHost(host);
+            SDHC_DeInitHost(host);
             return false;
         }
     }
@@ -586,12 +682,12 @@ bool test_data_access(void)
     while(i--)
     {
         //ms = OSA_TimeGetMsec();
-        host->markStartTimeMsec();
+        last_ms = host->getCurrentTimeMsec();
         if (kStatus_SDMMC_NoError != SD_WriteBlocks(sd, g_refData, TEST_START_BLOCK, sizeof(g_refData)/FSL_CARD_DEFAULT_BLOCK_SIZE))
         {
             PRINTF("ERROR: SD_WriteBlocks failed, line %d\r\n", __LINE__);
             SD_Shutdown(sd);
-            SDMMC_DeInitHost(host);
+            SDHC_DeInitHost(host);
             return false;
         }
         /*current_ms = OSA_TimeGetMsec();
@@ -601,8 +697,12 @@ bool test_data_access(void)
         }
 
         elapsed_ms += current_ms - ms;*/
-        current_ms = host->getElapsedTimeMsec();
-        elapsed_ms += current_ms;
+        current_ms = host->getCurrentTimeMsec();
+        if (current_ms < last_ms)
+        {
+            current_ms += host->timeRangeMsec;
+        }
+        elapsed_ms = current_ms - last_ms;
     }
     PRINTF("Writing %lu bytes for %u times in %u ms, at %u kB/s\r\n", sizeof(g_refData), LOOPS, elapsed_ms, sizeof(g_refData) * LOOPS / elapsed_ms);
 
@@ -610,12 +710,12 @@ bool test_data_access(void)
     i = LOOPS;
     while(i--)
     {
-        host->markStartTimeMsec();
+        last_ms = host->getCurrentTimeMsec();
         if (kStatus_SDMMC_NoError != SD_ReadBlocks(sd, g_testData, TEST_START_BLOCK, sizeof(g_testData)/FSL_CARD_DEFAULT_BLOCK_SIZE))
         {
             PRINTF("ERROR: SD_ReadBlocks failed, line %d\r\n", __LINE__);
             SD_Shutdown(sd);
-            SDMMC_DeInitHost(host);
+            SDHC_DeInitHost(host);
             return false;
         }
         /*current_ms = OSA_TimeGetMsec();
@@ -625,8 +725,12 @@ bool test_data_access(void)
         }
 
         elapsed_ms += current_ms - ms;*/
-        current_ms = host->getElapsedTimeMsec();
-        elapsed_ms += current_ms;
+        current_ms = host->getCurrentTimeMsec();
+        if (current_ms < last_ms)
+        {
+            current_ms += host->timeRangeMsec;
+        }
+        elapsed_ms = current_ms - last_ms;
     }
     PRINTF("Reading %lu bytes for %u times in %u ms, at %u kB/s\r\n", sizeof(g_testData), LOOPS, elapsed_ms, sizeof(g_testData) * LOOPS / elapsed_ms);
 
@@ -638,7 +742,7 @@ bool test_data_access(void)
         {
             PRINTF("ERROR: SD_ReadBlocks failed, line %d\r\n", __LINE__);
             SD_Shutdown(sd);
-            SDMMC_DeInitHost(host);
+            SDHC_DeInitHost(host);
             return false;
         }
 
@@ -646,7 +750,7 @@ bool test_data_access(void)
         {
             PRINTF("ERROR: data comparison failed, line %d\r\n", __LINE__);
             SD_Shutdown(sd);
-            SDMMC_DeInitHost(host);
+            SDHC_DeInitHost(host);
             return false;
         }
     }
@@ -656,53 +760,19 @@ bool test_data_access(void)
     {
         PRINTF("ERROR: SD_EraseBlocks failed, line %d\r\n", __LINE__);
         SD_Shutdown(sd);
-        SDMMC_DeInitHost(host);
+        SDHC_DeInitHost(host);
         return false;
     }
     PRINTF("Erase blocks test passed!\r\n");
 
     SD_Shutdown(sd);
-    SDMMC_DeInitHost(host);
+    SDHC_DeInitHost(host);
     while (1);
-    while(1)
-    {
-        //CLOCK_SYS_EnableSdhcClock(0);
-        //
-        memset(g_refData, 1, sizeof(g_refData));
-        memset(g_testData, 1, sizeof(g_testData));
-        
-        if (kStatus_SDMMC_NoError != SD_WriteBlocks(sd, g_testData, 2, 1))
-        {
-            break;
-        }
-        if (kStatus_SDMMC_NoError != SD_ReadBlocks(sd, g_testData, 2, 1))
-        {
-            break;
-        }
-        if (memcmp(g_testData, g_refData, FSL_CARD_DEFAULT_BLOCK_SIZE))
-        {
-            break;
-        }
-        if (kStatus_SDMMC_NoError != SD_WriteBlocks(sd, g_testData, 2, TEST_BLOCK_NUM))
-        {
-            break;
-        }
-        if (kStatus_SDMMC_NoError != SD_ReadBlocks(sd, g_testData, 2, TEST_BLOCK_NUM))
-        {
-            break;
-        }
-        if (memcmp(g_testData, g_refData, FSL_CARD_DEFAULT_BLOCK_SIZE * TEST_BLOCK_NUM))
-        {
-            break;
-        }
 
-        //CLOCK_SYS_DisableSdhcClock(0);
-         delayTimeMsec(100);
-    }
     
     
     while(1);
-    if (!test_card_detection())
+    if (!test_card_detection(host, sd))
     {
         deleteCardDetectEvent();
         return false;
@@ -710,5 +780,22 @@ bool test_data_access(void)
 //#if defined CD_USING_GPIO
     deleteCardDetectEvent();
 //#endif
+    return true;
+}
+
+bool test_sd()
+{
+    sdhc_host_t *host = &g_host;
+    sdhc_host_user_config_t hostConfig;
+    sd_t *sd = &g_sd;
+    //SoftDeley();
+   
+    test_card_common_init(host, sd, &hostConfig);
+    
+    //test_card_detection(host, sd);
+    test_card_power_consumption(host, sd);
+    
+    //test_card_data_access(host, sd);
+    
     return true;
 }

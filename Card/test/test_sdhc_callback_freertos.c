@@ -35,10 +35,11 @@
 #include "semphr.h"
 #include "event_groups.h"
 
-#include "fsl_clock_manager.h"
-#include "fsl_debug_console.h"
    
-#include "card_test_function.h"
+#include "test_sdhc_callback.h"
+#include "test_sdhc_board.h"
+#include "sdhc.h"
+
 
 static volatile xSemaphoreHandle g_cmdEvent = {0}, g_dataEvent = {0}, 
                                  g_cardDetectEvent = {0};
@@ -71,7 +72,7 @@ bool createCmdEvent()
 bool waitCmdEvent(uint32_t timeout)
 {
     uint32_t timeoutTicks;
-    if (timeout == FSL_HOST_WAIT_FOREVER)
+    if (timeout == FSL_SDHC_WAIT_FOREVER)
     {
         timeoutTicks = portMAX_DELAY;
     }
@@ -125,7 +126,7 @@ bool createDataEvent()
 bool waitDataEvent(uint32_t timeoutMsec)
 {
     uint32_t timeoutTicks;
-    if (timeoutMsec == FSL_HOST_WAIT_FOREVER)
+    if (timeoutMsec == FSL_SDHC_WAIT_FOREVER)
     {
         timeoutTicks = portMAX_DELAY;
     }
@@ -179,7 +180,7 @@ bool createCardDetectEvent()
 bool waitCardDetectEvent(uint32_t timeout)
 {
     uint32_t timeoutTicks;
-    if (timeout == FSL_HOST_WAIT_FOREVER)
+    if (timeout == FSL_SDHC_WAIT_FOREVER)
     {
         timeoutTicks = portMAX_DELAY;
     }
@@ -266,35 +267,29 @@ void delayTimeMsec(uint32_t msec)
 
 static void task_test_sdhc_card(void *param)
 {
-    //test_card_detection();
-    test_data_access();
+    //test_sd();
 }
 
-int main(void)
+uint32_t getCurrentTimeMsec()
+{
+    portTickType ticks;
+
+    if (__get_IPSR())
+    {
+        ticks = xTaskGetTickCountFromISR();
+    }
+    else
+    {
+        ticks = xTaskGetTickCount();
+    }
+
+    return TICKS_TO_MSEC(ticks);
+}
+
+int init_freertos_callback(void)
 {
     BaseType_t xReturn = pdFAIL;
     
-    init_hardware();
-
-    NVIC_SetPriority(SDHC_IRQn, 6U);
-//#if defined CD_USING_GPIO
-    NVIC_SetPriority(PORTA_IRQn, 6U);
-#if (PORT_INSTANCE_COUNT > 1)
-    NVIC_SetPriority(PORTB_IRQn, 6U);
-#endif       
-#if (PORT_INSTANCE_COUNT > 2)
-    NVIC_SetPriority(PORTC_IRQn, 6U);
-#endif   
-#if (PORT_INSTANCE_COUNT > 3)
-    NVIC_SetPriority(PORTD_IRQn, 6U);
-#endif   
-#if (PORT_INSTANCE_COUNT > 4)
-    NVIC_SetPriority(PORTE_IRQn, 6U);
-#endif   
-#if (PORT_INSTANCE_COUNT > 5)
-    NVIC_SetPriority(PORTF_IRQn, 6U);
-#endif   
-//#endif /* CD_USING_GPIO */
     // create app tasks
     xReturn = xTaskCreate(task_test_sdhc_card, 
                           "test_sdhc_card", 
@@ -304,7 +299,6 @@ int main(void)
                           &task_test_sdhc_card_task_handler);
     if (xReturn == pdFAIL)
     {
-        PRINTF("Failed to create test-sdhc-card task\n\n");
         return -1;
     }
 

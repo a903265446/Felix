@@ -30,6 +30,8 @@
 #ifndef __CARD_H__
 #define __CARD_H__
 
+
+#include "ksdk_common.h"
 #include "spec.h"
 #include "sdhc.h"
 
@@ -38,184 +40,47 @@
  ******************************************************************************/
 
 /*!
- * @addtogroup CARD TYPE
+ * @addtogroup card_driver
  * @{
  */
 
-/*! 
- * @brief The command response type. 
- *
- * Defines the command response type from card to host controller.
- */
-typedef enum _sdmmc_resp_type 
-{
-    kSdmmcRespTypeNone = 0U,         /*!< Response type: none */
-    kSdmmcRespTypeR1   = 1U,         /*!< Response type: R1 */
-    kSdmmcRespTypeR1b  = 2U,         /*!< Response type: R1b */
-    kSdmmcRespTypeR2   = 3U,         /*!< Response type: R2 */
-    kSdmmcRespTypeR3   = 4U,         /*!< Response type: R3 */
-    kSdmmcRespTypeR4   = 5U,         /*!< Response type: R4 */
-    kSdmmcRespTypeR5   = 6U,         /*!< Response type: R5 */
-    kSdmmcRespTypeR5b  = 7U,         /*!< Response type: R5b */
-    kSdmmcRespTypeR6   = 8U,         /*!< Response type: R6 */
-    kSdmmcRespTypeR7   = 9U,         /*!< Response type: R7 */
-} sdmmc_resp_type_t;
 
 /*! @brief Defines the SD/MMC card API's running status. */
 typedef enum _sdmmc_status
 {   
-    kStatus_SDMMC_NoError                   = 0U,/*!< Success */
-    kStatus_SDMMC_Failed                    = 1U,/*!< Failed */  
-    kStatus_SDMMC_TimeoutError              = 2U,/*!< Timeout */  
-    kStatus_SDMMC_NotSupportYet             = 3U,/*!< Havn't supported */
-    kStatus_SDMMC_OutOfMemory               = 4U,/*!< No enough memory */
-    kStatus_SDMMC_BlockSizeHostNotSupport   = 5U,/*!< Block size isn't supported by host */
-    kStatus_SDMMC_HostIsBusyError           = 6U,/*!< Host is busy */ 
-    kStatus_SDMMC_PrepareHostDmaDataError   = 7U,/*!< DMA address error */
-    kStatus_SDMMC_CardDetectNotSupportYet   = 8U,/*!< Card detection type isn't supported by host */
-    kStatus_SDMMC_NoCardInsertedError       = 9U,/*!< No inserted card */
-    kStatus_SDMMC_AllocHostAdmaTableFailed  = 10U,/*!< Allocate host ADMA table memory failed */
-    kStatus_SDMMC_SendCardCmdFailed         = 11U,/*!< Send card command failed */
-    kStatus_SDMMC_TransferCardDataFailed    = 12U,/*!< Transfer card data failed */
-    kStatus_SDMMC_CardStatusError           = 13U,/*!< Card status is error */
-    kStatus_SDMMC_SetCardBlockSizeFailed    = 14U,/* Set card block size failed */
-    kStatus_SDMMC_SetCardBusClockFailed     = 15U,/*!< Set card bus clock failed */
-    kStatus_SDMMC_CardNotSupport            = 16U,/*!< Card doesn't support */ 
-    kStatus_SDMMC_InvalidIORange            = 17U,/*!< Invalid read/write address range */ 
-    kStatus_SDMMC_AllSendCidCmdFailed       = 18U,/*!< AllSendCid command failed */
-    kStatus_SDMMC_SendRcaCmdFailed          = 19U,/*!< SendRca command failed */
-    kStatus_SDMMC_SendCsdCmdFailed          = 20U,/*!< SendCsd command failed */
-    kStatus_SDMMC_SelectCardCmdFailed       = 21U,/*!< SelectCard command failed */
-    kStatus_SDMMC_SendScrCmdFailed          = 22U,/*!< SendScr command failed */ 
-    kStatus_SDMMC_SetBusWidthCmdFailed      = 23U,/*!< SetBusWidth command failed */
-    kStatus_SDMMC_GoIdleCmdFailed           = 24U,/*!< GoIdle command failed */
-    kStatus_SDMMC_SendOpCondCmdFailed       = 25U,/*!< SendOpCond command failed */
-    kStatus_SDMMC_EraseCmdFailed            = 26U,/*!< Erase command failed */
-    kStatus_SDMMC_SwitchFunctionCmdFailed   = 27U,/*!< SwitchFunction command failed */ 
-    kStatus_SDMMC_StopTransmissionCmdFailed = 28U,/*!< StopTransmission command failed */
-    kStatus_SDMMC_SendStatusCmdFailed       = 29U,/*!< SendStatus command failed */
-    kStatus_SDMMC_CreateEventFailed         = 30U,/*!< Create event failed */
-    kStatus_SDMMC_WaitEventFailed           = 31U,/*!< Wait event failed */
-    kStatus_SDMMC_NotifyEventFailed         = 32U,/*!< Notify event failed */
-    kStatus_SDMMC_GetCurrentTimeFaild       = 33U /*!< Get current time failed */
+    kStatus_SDMMC_NotSupportYet          = MAKE_STATUS(kStatusGroup_SDMMC, 0),/*!< Havn't supported */
+    kStatus_SDMMC_SendCommandFailed      = MAKE_STATUS(kStatusGroup_SDMMC, 1),/*!< Send command failed */
+    kStatus_SDMMC_TransferDataFailed     = MAKE_STATUS(kStatusGroup_SDMMC, 2),/*!< Send command failed */
+    kStatus_SDMMC_SetCardBusClockFailed  = MAKE_STATUS(kStatusGroup_SDMMC, 1),/*!< Set card bus clock failed */  
+    kStatus_SDMMC_CardStatusError        = MAKE_STATUS(kStatusGroup_SDMMC, 3),/*!< Card status is error */
+    kStatus_SDMMC_SetCardBlockSizeFailed = MAKE_STATUS(kStatusGroup_SDMMC, 4),/* Set card block size failed */
+    kStatus_SDMMC_CardNotSupport         = MAKE_STATUS(kStatusGroup_SDMMC, 5),/*!< Card doesn't support */ 
+    kStatus_SDMMC_InvalidIORange         = MAKE_STATUS(kStatusGroup_SDMMC, 6),/*!< Invalid read/write address range */\
+    kStatus_SDMMC_AllSendCidFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 7),/*!< AllSendCid failed */
+    kStatus_SDMMC_SendRcaFailed          = MAKE_STATUS(kStatusGroup_SDMMC, 8),/*!< SendRca failed */
+    kStatus_SDMMC_SendCsdFailed          = MAKE_STATUS(kStatusGroup_SDMMC, 9),/*!< SendCsd failed */
+    kStatus_SDMMC_SelectCardFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 10),/*!< SelectCard failed */
+    kStatus_SDMMC_SendScrFailed          = MAKE_STATUS(kStatusGroup_SDMMC, 11),/*!< SendScr failed */ 
+    kStatus_SDMMC_SetBusWidthFailed      = MAKE_STATUS(kStatusGroup_SDMMC, 12),/*!< SetBusWidth failed */
+    kStatus_SDMMC_GoIdleFailed           = MAKE_STATUS(kStatusGroup_SDMMC, 13),/*!< GoIdle failed */
+    kStatus_SDMMC_SendOpCondFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 14),/*!< SendOpCond failed */
+    kStatus_SDMMC_EraseFailed            = MAKE_STATUS(kStatusGroup_SDMMC, 15),/*!< Erase failed */
+    kStatus_SDMMC_SendAppCmdFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 16),/*!< Send application command failed */
+    kStatus_SDMMC_SwitchFailed           = MAKE_STATUS(kStatusGroup_SDMMC, 16),/*!< SwitchFunction failed */ 
+    kStatus_SDMMC_StopTransmissionFailed = MAKE_STATUS(kStatusGroup_SDMMC, 17),/*!< StopTransmission failed */
+    kStatus_SDMMC_SendStatusFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 18),/*!< SendStatus failed */
+    kStatus_SDMMC_SetBlockCountFailed    = MAKE_STATUS(kStatusGroup_SDMMC, 19),/*!< SetBlockCount failed*/
+    kStatus_SDMMC_SetRelativeAddrFailed  = MAKE_STATUS(kStatusGroup_SDMMC, 20),/*!< SetRelativeAddr failed */ 
+    kStatus_SDMMC_GetPowerClassFailed    = MAKE_STATUS(kStatusGroup_SDMMC, 21),/*!< Get power class failed */
+    kStatus_SDMMC_SetPowerClassFailed    = MAKE_STATUS(kStatusGroup_SDMMC, 22),/*!< Set power class failed */
+    kStatus_SDMMC_BusTestProcessFailed   = MAKE_STATUS(kStatusGroup_SDMMC, 23),/*!< Bus test process failed */
+    kStatus_SDMMC_SwitchHighSpeedFailed  = MAKE_STATUS(kStatusGroup_SDMMC, 24),/*!< Switch high speed failed */
+    kStatus_SDMMC_SendExtCsdFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 25),/*!< SendExtCsd failed */
+    kStatus_SDMMC_NotEraseGroupAddress   = MAKE_STATUS(kStatusGroup_SDMMC, 26),/*!< Erase address is not erase group address */
+    kStatus_SDMMC_ConfigBootFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 27),/*!< Configure boot feature failed */
 } sdmmc_status_t;
 
-/*! @brief Defines host's transfer mode */
-typedef enum _sdmmc_host_transfer_mode 
-{
-    kSdmmcHostTransModePio   = 1U,   /*!< Polling Data Port */
-    kSdmmcHostTransModeSdma  = 2U,   /*!< Simple DMA */
-    kSdmmcHostTransModeAdma1 = 3U,   /*!< ADMA1 */
-    kSdmmcHostTransModeAdma2 = 4U,   /*!< ADMA2 */
-} sdmmc_host_transfer_mode_t;
 
-/*! @brief Defines host's card detection way */
-typedef enum _sdmmc_host_card_detect 
-{
-    kSdmmcHostCardDetectGpio     = 1U,/*!< Use GPIO for card detection. */
-    kSdmmcHostCardDetectDat3     = 2U,/*!< Use DAT3 for card detection. */
-    kSdmmcHostCardDetectCdPin    = 3U,/*!< Use dedicate CD pin for card detection */
-    kSdmmcHostCardDetectPollDat3 = 4U,/*!< Poll DAT3 for card detection. */
-    kSdmmcHostCardDetectPollCd   = 5U,/*!< Poll dedicate CD pin for card detection. */
-} sdmmc_host_card_detect_t;
-
-/*!
- * @brief Card data structure
- *
- * Defines this structure to contain data related attribute, flag and error status.
- */
-typedef struct CardData
-{
-    uint32_t blockSize;             /*!< Block size */
-    uint32_t blockCount;            /*!< Block count */
-    uint32_t bytesTransferred;      /*!< Transferred byte count */
-    uint32_t *buffer;               /*!< Data buffer */
-    uint32_t flags;                 /*!< Data flags */
-#define CARD_DATA_FLAGS_DATA_READ      (1U << 0U)/*!< Data direction */
-#define CARD_DATA_FLAGS_USE_DMA        (1U << 1U)/*!< DMA enable status */    
-    uint32_t errors;                /*!< Error status */
-#define CARD_DATA_ERR_DATA_TIMEOUT     (1U << 0U)/*!< Data timeout error */ 
-#define CARD_DATA_ERR_DATA_CRC         (1U << 1U)/*!< Data CRC error */
-#define CARD_DATA_ERR_DATA_END_BIT     (1U << 2U)/*!< Data end bit error */
-#define CARD_DATA_ERR_DMA              (1U << 3U)/*!< DMA error */
-#define CARD_DATA_ERR_AUTO_CMD12       (1U << 4U)/*!< Auto CMD12 error */
-} card_data_t;
-
-/*!
- * @brief Card command structure
- *
- * Defines card command related attribute, flags, error status.
- */
-typedef struct CardCmd
-{
-    uint32_t cmdIndex;                /*!< Command index */
-    uint32_t argument;                /*!< Command argument */
-    uint32_t flags;                   /*!< Flags */
-#define CARD_CMD_FLAGS_STOP_TRANS     (1U << 0U) /*!< Request to stop transmition */ 
-    sdmmc_resp_type_t respType;       /*!< Command response type */
-    uint32_t errors;                  /*!< Command error code */
-#define CARD_CMD_ERR_HOST_BUSY        (1U << 0U) /*!< Host is busy */
-#define CARD_CMD_ERR_SEND_CMD         (1U << 1U) /*!< Send command error */
-#define CARD_CMD_ERR_CMD_CRC          (1U << 2U) /*!< Command CRC error */
-#define CARD_CMD_ERR_CMD_INDEX        (1U << 3U) /*!< Command index error */
-#define CARD_CMD_ERR_CMD_END_BIT      (1U << 4U) /*!< Command end bit error */
-#define CARD_CMD_ERR_CMD_TIMEOUT      (1U << 5U) /*!< Command timeout error */
-#define CARD_CMD_ERR_CARD_REMOVED     (1U << 6U) /*!< Card removed */
-#define CARD_CMD_ERR_RSPBUSY_TIMEOUT  (1U << 7U) /*!< Response busy timeout error */
-    uint32_t response[4];             /*!< Response for this command */
-} card_cmd_t;
-
-/* Host capability */
-#define host_capability_t sdhc_capability_t
-
-/*! @brief Host information and callback */
-typedef struct Host
-{
-    /* Data */
-    uint32_t instance;                       /*!< Host instance id */
-    sdmmc_host_card_detect_t cardDetectMode; /*!< Card detection mode */
-    sdmmc_host_transfer_mode_t transferMode; /*!< Data transfer mode */
-    host_capability_t * capability;          /*!< Capability information */
-    uint32_t flags;                          /*!< Flags */
-#define HOST_FLAGS_CARD_PRESENTED    (1U << 0U) /* Detected card is inserted */
-    card_cmd_t *currentCmd;                  /*!< Command is sending */
-    card_data_t *currentData;                /*!< Data is transferring */
-    uint32_t *admaTableAddress;              /*!< ADMA table address */
-    uint32_t admaTableMaxEntries;            /*!< Items count in ADMA table */
-
-    /* Callback */
-    bool (*createCmdEvent)();                /*!< Create command event */
-    bool (*waitCmdEvent)(uint32_t timeout);  /*!< Wait command event */
-    bool (*notifyCmdEvent)();                /*!< Notify command event */
-    bool (*deleteCmdEvent)();                /*!< Delete command event */
-    bool (*createDataEvent)();               /*!< Create data event */
-    bool (*waitDataEvent)(uint32_t timeout); /*!< Wait data event */
-    bool (*notifyDataEvent)();               /*!< Notify data event */ 
-    bool (*deleteDataEvent)();               /*!< Delete data event */
-    void (*markStartTimeMsec)();             /*!< Mark start to count milisecond */
-    uint32_t (*getElapsedTimeMsec)();        /*!< Get miliseconds elapsed */
-    void (*delayTimeMsec)();                 /*!< Delay milisecond */
-    void (*cardIntCallback)(uint32_t hostInstance); /*!< Card interrupt occurs */
-    void (*cardDetectCallback)(uint32_t hostInstance, bool inserted);/*!< Card detect occurs */
-    void (*blockGapCallback)(uint32_t hostInstance);/*!< Block gap occurs */
-} host_t;
-
-/* Defines host endian mode */
-//#define FSL_HOST_USING_BIG_ENDIAN 
-/* Defines if card driver support ADMA1 related operation. */
-//#define FSL_CARD_DRIVER_ENABLE_ADMA1
-
-/* Check if host support switching the card to high speed mode */
-#define DOES_HOST_SUPPORT_HIGHSPEED(x)      (x->capability->supportMask & SDHC_SUPPORT_HIGHSPEED)
-/* eSDHC on all kinetis boards will support 4 bit data bus. */
-#define DOES_HOST_SUPPORT_4BITS(x)          true
-/* Defines if use IRQ mode to send command and transfer data */
-#define FSL_CARD_DRIVER_USING_IRQ
-/* Enable auto CMD12 in host */
-//#define FSL_CARD_DRIVER_ENABLE_HOST_AUTOCMD12
-
-/* Continuously wait till the event be nodified */
-#define FSL_HOST_WAIT_FOREVER               (1U << 32U - 1U)
 
 /*!
  * @brief SD Card Structure
@@ -223,16 +88,17 @@ typedef struct Host
  * Defines the card structure including the necessary fields to identify and
  * describe the card.
  */
-typedef struct Sd 
+typedef struct SDCard 
 {
-    host_t * host;               /*!< Host state information */
+    SDHC_Type *hostBase;         /*!< host regist base address */
+    sdhc_host_t * host;          /*!< Host state information */
     uint32_t rca;                /*!< Relative address of the card */
     uint32_t version;            /*!< Card version */
-    uint32_t caps;               /*!< Capability */
-#define SD_CARD_CAPS_HIGHCAPACITY    (1U << 1U)/*!< Card is high capacity */
-#define SD_CARD_CAPS_BUSWIDTH_4BITS  (1U << 2U)/*!< Support 4-bit data width */
-#define SD_CARD_CAPS_SDHC            (1U << 3U)/*!< Card is SDHC */
-#define SD_CARD_CAPS_SDXC            (1U << 4U)/*!< Card is SDXC */
+    uint32_t caps;               /*!< Capability mask */
+#define SD_CAPS_HIGH_CAPACITY    (1U << 1U)/*!< Card is high capacity */
+#define SD_CAPS_BUS_WIDTH_4BITS  (1U << 2U)/*!< Support 4-bit data width */
+#define SD_CAPS_SDHC             (1U << 3U)/*!< Card is SDHC */
+#define SD_CAPS_SDXC             (1U << 4U)/*!< Card is SDXC */
     uint32_t rawCid[4];          /*!< Raw CID content */
     uint32_t rawCsd[4];          /*!< Raw CSD content */
     uint32_t rawScr[2];          /*!< Raw CSD content */
@@ -242,22 +108,64 @@ typedef struct Sd
     sd_scr_t scr;                /*!< SCR */
     uint32_t blockCount;         /*!< Card total block number */
     uint32_t blockSize;          /*!< Card block size */
-} sd_t;
+} sd_card_t;
 
-/* Checks if card support high speed mode. */
-#define IS_HIGHCAPACITY_CARD(x)             ((x)->caps & SD_CARD_CAPS_HIGHCAPACITY)
 /* Checks if card support 4 bit width */
-#define DOES_CARD_SUPPORT_4BITS(x)          ((x)->caps & SD_CARD_CAPS_BUSWIDTH_4BITS)
-/* Maximum loop count to check the card operation voltage range */
+#define DOES_SD_SUPPORT_4BITS(x)          ((x)->caps & SD_CAPS_BUS_WIDTH_4BITS)
+/* Checks if card support high speed mode. */
+#define IS_SD_HIGH_CAPACITY(x)            ((x)->caps & SD_CAPS_HIGH_CAPACITY)
+
+typedef struct MMCCard
+{
+    sdhc_host_t * host;                         /*!< Host state information */
+    uint32_t rca;                               /*!< Relative address of the card */
+    bool enablePreDefBlkCnt;                    /*!< Enables PRE-DEFINED block count when read/write*/
+    uint32_t caps;                              /*!< Capability */
+#define MMC_CAPS_HIGH_SPEED        (1U << 0U)   /*!< Card high speed support bit */
+#define MMC_CAPS_HIGH_SPEED_52MHZ  (1U << 1U)   /*!< Card support high speed 52MHZ */
+#define MMC_CAPS_HIGH_SPEED_26MHZ  (1U << 2U)   /*!< Card support high speed 26MHZ */
+#define MMC_CAPS_HIGH_CAPACITY     (1U << 3U)   /*!< Card is high capacity */
+#define MMC_CAPS_EXT_CSD           (1U << 4U)   /*!< Card support switch command */
+#define MMC_CAPS_ALTER_BOOT        (1U << 5U)   /*!< MMC card support alternate boot */
+    uint32_t rawCid[4];                         /*!< CID */
+    uint32_t rawCsd[4];                         /*!< CSD */
+    uint32_t rawExtCsd[MMC_EXT_CSD_LEN_AS_WORD];/*!< MMC EXT_CSD */
+    uint32_t ocr;                               /*!< MMC OCR */
+    mmc_cid_t cid;                              /*!< MMC CID */
+    mmc_csd_t csd;                              /*!< MMC CSD */
+    mmc_ext_csd_t extCsd;                       /*!< MMC EXT_CSD */  
+    uint32_t blockCount;                        /*!< Card total block number */
+    uint32_t blockSize;                         /*!< Card block size */
+    uint32_t eraseGroupSize;                    /*!< Erase group size united as block size */
+    uint32_t writeProtectGroupSize;             /*!< Write protect group size united as erase group size */
+    uint32_t bootPartitionSize;                 /*!< Boot partition size united as blocks */          
+    mmc_volt_range_t hostVoltRange;             /*!< Host intended volt range */ 
+    mmc_access_partition_t currentPartition;    /*!< Current access partition */
+} mmc_card_t;
+
+#define DOES_MMC_SUPPORT_HIGH_SPEED_52MHZ(x)  ((x)->caps & MMC_CAPS_HIGH_SPEED_52MHZ) 
+#define DOES_MMC_SUPPORT_HIGH_SPEED_26MHZ(x)  ((x)->caps & MMC_CAPS_HIGH_SPEED_26MHZ)
+/* Checks if card support high speed mode. */
+#define IS_MMC_HIGH_CAPACITY(x)               ((x)->caps & MMC_CAPS_HIGH_CAPACITY)
+
+
+/*!
+ * @brief MMC card boot configuration definition.
+ */
+typedef struct MMCBootConfig
+{
+    bool bootAckEnable;                             /*!< Boot ACK enable */
+    mmc_boot_partition_enable_t bootPartitionEnable;/*!< Boot partition */
+    bool retainBootBusWidth;                        /*!< If retain boot bus width */
+    mmc_bus_width_t bootBusWidth;                   /*!< Boot bus width */
+} mmc_boot_config_t;
+
+/* Maximum loop count to check the card operation volt range */
 #define FSL_CARD_MAX_VOLT_RETRIES           (1000U)
 /* Default block size */
 #define FSL_CARD_DEFAULT_BLOCK_SIZE         (512U) 
 /* Card command maximum timeout value */     
-#define FSL_CARD_COMMAND_TIMEOUT            (1000U)
-
-/*! @name CARD  FUNCTION */
-/*@{ */
-
+#define FSL_CARD_COMMAND_TIMEOUT            (5000U)
 /*************************************************************************************************
  * API
  ************************************************************************************************/
@@ -266,8 +174,10 @@ typedef struct Sd
 extern "C" {
 #endif
 
-/*! @name CARD DRIVER FUNCTION */
-/*@{ */
+/*!
+ * @name Card Driver Function
+ * @{ 
+ */
 
 /*!
  * @brief Initializes the card on a specific host controller.
@@ -276,9 +186,14 @@ extern "C" {
  *
  * @param host The pointer to store the host inforamtion.
  * @param card The pointer to store card related information.
- * @return kStatus_SD_NoError on success
+ * @return kStatus_SDMMC_NoError on success
  */
-sdmmc_status_t SD_IndentifyCard(host_t *host, sd_t *card);
+status_t SD_Init(sd_card_t *card);
+
+/*! 
+ * @name Operate the card
+ * @{ 
+ */
 
 /*!
  * @brief Reads blocks from the specific card.
@@ -290,10 +205,9 @@ sdmmc_status_t SD_IndentifyCard(host_t *host, sd_t *card);
  * @param buffer The buffer to hold the data read from card
  * @param startBlock The start block index
  * @param blockCount The number of blocks to read
- * @return kStatus_SD_NoError on success
+ * @return kStatus_SDMMC_NoError on success
  */
-sdmmc_status_t SD_ReadBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock, 
-                    uint32_t blockCount);
+status_t SD_ReadBlocks(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, uint32_t blockCount);
 
 /*!
  * @brief Writes blocks of data to the specific card.
@@ -305,10 +219,9 @@ sdmmc_status_t SD_ReadBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock,
  * @param buffer The buffer holding the data to be written to the card
  * @param startBlock The start block index
  * @param blockCount The number of blocks to write
- * @return kStatus_SD_NoError on success
+ * @return kStatus_SDMMC_NoError on success
  */
-sdmmc_status_t SD_WriteBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock, 
-                      uint32_t blockCount);
+status_t SD_WriteBlocks(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, uint32_t blockCount);
 
 /*!
  * @brief Erases blocks of the specific card.
@@ -319,9 +232,9 @@ sdmmc_status_t SD_WriteBlocks(sd_t *card, uint8_t *buffer, uint32_t startBlock,
  * @param card The handle of the card
  * @param startBlock The start block index
  * @param blockCount The number of blocks to erase
- * @return kStatus_SD_NoError on success
+ * @return kStatus_SDMMC_NoError on success
  */
-sdmmc_status_t SD_EraseBlocks(sd_t *card, uint32_t startBlock, uint32_t blockCount);
+status_t SD_EraseBlocks(sd_card_t *card, uint32_t startBlock, uint32_t blockCount);
 
 /*!
  * @brief Checks whether the card is write-protected.
@@ -329,9 +242,9 @@ sdmmc_status_t SD_EraseBlocks(sd_t *card, uint32_t startBlock, uint32_t blockCou
  * This function checks if the card is write-protected via CSD register.
  *
  * @param card The specific card
- * @return kStatus_SD_NoError on success
+ * @return kStatus_SDMMC_NoError on success
  */
-bool SD_CheckReadOnly(sd_t *card);
+bool SD_CheckReadOnly(sd_card_t *card);
 
 /*!
  * @brief Deinitializes the card.
@@ -340,108 +253,83 @@ bool SD_CheckReadOnly(sd_t *card);
  *
  * @param card The specific card
  */
-void SD_Shutdown(sd_t *card);
+void SD_DeInit(sd_card_t *card);
 
 /*!
- * @brief Checks whether the card is present on a specified host controller.
- *
- * This function checks if there's a card inserted in the SDHC. It is mainly 
- * used in the polling detection pin mode when DAT3 or dedicate CD pin is selected
- * as card detection pin.
- *
- * @param card The specific card
- * @return kStatus_SD_NoError on success
+ * @brief Initializes the MMC card.
+ * @param host Host controller descriptor
+ * @param card Card descriptor
+ * @return kStatus_SDMMC_NoError on success
  */
-sdmmc_status_t SD_DetectCard(sd_t *card);
-
+status_t MMC_Init(mmc_card_t *card);
 
 /*!
- * @brief IRQ handler for SDHC
- *
- * This function deals with IRQs on the given host controller.
- *
- * @param host the host state inforamtion
+ * Checks the card read only feature.
+ * @param card Card descriptor
+ * @return Read only or not
+ *         - Card is read only
+ *         - Card is not read only
  */
-void SDMMC_IrqHandler(host_t* host);
+bool MMC_CheckReadOnly(mmc_card_t *card);
 
 /*!
- * @brief Sends a command using block way.
- *
- * This function will wait until the command response is got.
- *
- * @param host The host information.
- * @param timeoutInMs The timeout time in miliseconds.
- * @return kStatus_SDMMC_NoError if no error.
+ * Selects the partition to access.
+ * @param  card Card descriptor
+ * @param  partitionNumber The partition number
+ * @return kStatus_SDMMC_NoError on success
  */
-sdmmc_status_t SDMMC_SendCmdBlocking(host_t *host, uint32_t timeoutInMs);
+status_t MMC_SelectAccessPartition(mmc_card_t *card, mmc_access_partition_t partitionNumber);
 
 /*!
- * @brief Checks the card status in the R1 reponse.
- *
- * This function checks the card status to estimate if sending command success.
- *
- * @param cardCmd The card command inforamtion.
- * @return kStatus_SDMMC_NoError if no error.
+ * Reads data blocks from the card.
+ * @param  card Card descriptor
+ * @param  buffer The buffer to save data blocks.
+ * @param  startBlock Start block
+ * @param  blockCount Block count
+ * @return kStatus_SDMMC_NoError on success
  */
-sdmmc_status_t SDMMC_CheckR1Response(card_cmd_t *cardCmd);
+status_t MMC_ReadBlocks(mmc_card_t *card,  uint8_t *buffer, uint32_t startBlock, uint32_t blockCount);
 
 /*!
- * @brief Waits until the data transfer complete.
- *
- * @param host The host information.
- * @param timeoutInMs The timeout time in miliseconds.
- * @return kStatus_SDMMC_NoError if no error.
+ * Writes data blocks to the card.
+ * @param  card Card descriptor
+ * @param  buffer The buffer to save data blocks
+ * @param  startBlock Start block number.
+ * @param  blockCount Block count
+ * @return kStatus_SDMMC_NoError on success
  */
-sdmmc_status_t SDMMC_WaitDataTransferComplete(host_t *host, uint32_t timeoutInMs);
+status_t MMC_WriteBlocks(mmc_card_t *card, uint8_t *buffer, uint32_t startBlock, uint32_t blockCount);
 
 /*!
- * @brief Detects if the card is inserted.
- *
- * @param host The host information.
- * @return kStatus_SDMMC_NoError if no error.
+ * Erases blocks of the card.
+ * @param  card Card descriptor
+ * @param  startBlock Start block
+ * @param  blockCount Block count
+ * @return kStatus_SDMMC_NoError on success
  */
-sdmmc_status_t SDMMC_DetectCard(host_t *host);
+status_t MMC_EraseBlocks(mmc_card_t *card, uint32_t startBlock, uint32_t blockCount);
 
 /*!
- * @brief Configures the SD bus clock frequence.
- *
- * @param host The host information.
- * @param Clock The target SD bus clock frequence. 
- * @return kStatus_SDMMC_NoError if no error.
+ * Configures boot activity of the card.
+ * @param  card Card descriptor
+ * @param  configPtr Boot configuration structure
+ * @return kStatus_SDMMC_NoError on success
  */
-sdmmc_status_t SDMMC_ConfigClock(host_t *host, uint32_t targetClock);
+status_t MMC_ConfigBoot(mmc_card_t *card, const mmc_boot_config_t *configPtr);
 
 /*!
- * @brief Initializes the host controller.
- *
- * @param host The host information.
- * @return kStatus_SDMMC_NoError if no error.
+ * DeInitializes the card.
+ * @param card Card descriptor.
  */
-sdmmc_status_t SDMMC_InitHost(host_t *host);
 
-/*!
- * @brief Deinitializes the host controller.
- * 
- * @param host The host information.
- * @return kStatus_SDMMC_NoError if no error.
- */
-sdmmc_status_t SDMMC_DeInitHost(host_t *host);
+void MMC_DeInit(mmc_card_t *card);
 
-/*!
- * @brief Sets the bus width of the host controller.
- *
- * @param host The host information.
- * @param busWidth The data bus width.
- */
-sdmmc_status_t SDMMC_SetHostBusWidth(host_t *host, sdhc_dtw_t busWidth);
-/*@} */
+
+/* @} */
 #if defined(__cplusplus)
 }
 #endif
 /*! @} */
 #endif  /* __CARD_H__*/
 
-/*************************************************************************************************
- * EOF
- ************************************************************************************************/
  

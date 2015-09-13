@@ -43,12 +43,11 @@
 #include "fsl_clock_manager.h"
 #include "fsl_lptmr_hal.h"
 
-#include "card_test_function.h"
+#include "test_sdhc_callback.h"
 
 
-static volatile uint32_t g_cmdEvent = 0, g_dataEvent = 0, 
-                         g_cardDetectEvent = 0, g_lastMsValue = 0;
-#define LPTMR_COUNTER_RANGE (1U<<16U - 1U)
+static volatile uint32_t g_cmdEvent = 0, g_dataEvent = 0, g_cardDetectEvent = 0;
+#define LPTMR_COUNTER_RANGE (65535U)
 
 bool createCmdEvent()
 {
@@ -122,29 +121,33 @@ bool deleteCardDetectEvent()
     return true;
 }
 
-void markStartTimeMsec()
+uint32_t getCurrentTimeMsec()
 {
     LPTMR_Type *base = LPTMR0;
-    g_lastMsValue = LPTMR_HAL_GetCounterValue(base);
+    return LPTMR_HAL_GetCounterValue(base);
 }
 
-uint32_t getElapsedTimeMsec()
+uint32_t getTimeRangeMsec()
 {
-    LPTMR_Type *base = LPTMR0;
-
-    uint32_t currentMsValue = LPTMR_HAL_GetCounterValue(base);
-
-    if (currentMsValue < g_lastMsValue)
-    {
-        return (currentMsValue += (LPTMR_COUNTER_RANGE - g_lastMsValue));
-    }
-    return (currentMsValue - g_lastMsValue);
+    return LPTMR_COUNTER_RANGE;
 }
 
 void delayTimeMsec(uint32_t msec)
 {
-    markStartTimeMsec();
-    while (getElapsedTimeMsec() < msec);
+    uint32_t lastMs, currentMs, elapsedMs;
+    LPTMR_Type *base = LPTMR0;
+    
+    lastMs = LPTMR_HAL_GetCounterValue(base);
+    elapsedMs = 0;
+    while (elapsedMs < msec)
+    {
+        currentMs = LPTMR_HAL_GetCounterValue(base);
+        if (currentMs < lastMs)
+        {
+            currentMs += LPTMR_COUNTER_RANGE;
+        }
+        elapsedMs = currentMs - lastMs;
+    }    
 }
 
 void init_lptmr(void)
@@ -170,14 +173,37 @@ void init_lptmr(void)
     LPTMR_HAL_Enable(base);
 }
 
-int main(void)
-{
-    init_hardware();
-    init_lptmr();
-    //test_card_detection();
-    test_data_access();
-    return 0;
-}
+
+
+// int main(void)
+// {
+       
+  //CLOCK_SYS_EnablePortClock(PORTA_IDX);
+  //CLOCK_SYS_EnablePortClock(PORTE_IDX);
+ // CLOCK_SYS_EnableSdhcClock(0);
+  //while(1);
+
+   //SoftDeley();
+ // CLOCK_SYS_EnableSdhcClock(0);
+    //
+   // CLOCK_SYS_DisableSdhcClock(0);
+  //while(1);
+    /*while(1)
+    {
+        __asm("NOP");
+    }*/
+    // init_hardware();
+    
+   // CLOCK_SYS_EnableSdhcClock(0);
+    
+   // CLOCK_SYS_DisableSdhcClock(0);
+   // while(1);
+    // init_lptmr();
+
+    
+//     test_sd();
+//     return 0;
+// }
 
 
 
