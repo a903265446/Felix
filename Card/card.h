@@ -31,7 +31,7 @@
 #define __CARD_H__
 
 
-#include "ksdk_common.h"
+#include "fsl_common.h"
 #include "spec.h"
 #include "sdhc.h"
 
@@ -40,50 +40,52 @@
  ******************************************************************************/
 
 /*!
- * @addtogroup card_driver
+ * @addtogroup Card driver
  * @{
  */
-
 
 /*! @brief Defines the SD/MMC card API's running status. */
 typedef enum _sdmmc_status
 {   
     kStatus_SDMMC_NotSupportYet          = MAKE_STATUS(kStatusGroup_SDMMC, 0),/*!< Havn't supported */
     kStatus_SDMMC_SendCommandFailed      = MAKE_STATUS(kStatusGroup_SDMMC, 1),/*!< Send command failed */
-    kStatus_SDMMC_TransferDataFailed     = MAKE_STATUS(kStatusGroup_SDMMC, 2),/*!< Send command failed */
-    kStatus_SDMMC_SetCardBusClockFailed  = MAKE_STATUS(kStatusGroup_SDMMC, 1),/*!< Set card bus clock failed */  
-    kStatus_SDMMC_CardStatusError        = MAKE_STATUS(kStatusGroup_SDMMC, 3),/*!< Card status is error */
-    kStatus_SDMMC_SetCardBlockSizeFailed = MAKE_STATUS(kStatusGroup_SDMMC, 4),/* Set card block size failed */
-    kStatus_SDMMC_CardNotSupport         = MAKE_STATUS(kStatusGroup_SDMMC, 5),/*!< Card doesn't support */ 
-    kStatus_SDMMC_InvalidIORange         = MAKE_STATUS(kStatusGroup_SDMMC, 6),/*!< Invalid read/write address range */\
-    kStatus_SDMMC_AllSendCidFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 7),/*!< AllSendCid failed */
-    kStatus_SDMMC_SendRcaFailed          = MAKE_STATUS(kStatusGroup_SDMMC, 8),/*!< SendRca failed */
-    kStatus_SDMMC_SendCsdFailed          = MAKE_STATUS(kStatusGroup_SDMMC, 9),/*!< SendCsd failed */
-    kStatus_SDMMC_SelectCardFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 10),/*!< SelectCard failed */
-    kStatus_SDMMC_SendScrFailed          = MAKE_STATUS(kStatusGroup_SDMMC, 11),/*!< SendScr failed */ 
-    kStatus_SDMMC_SetBusWidthFailed      = MAKE_STATUS(kStatusGroup_SDMMC, 12),/*!< SetBusWidth failed */
-    kStatus_SDMMC_GoIdleFailed           = MAKE_STATUS(kStatusGroup_SDMMC, 13),/*!< GoIdle failed */
-    kStatus_SDMMC_SendOpCondFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 14),/*!< SendOpCond failed */
-    kStatus_SDMMC_EraseFailed            = MAKE_STATUS(kStatusGroup_SDMMC, 15),/*!< Erase failed */
-    kStatus_SDMMC_SendAppCmdFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 16),/*!< Send application command failed */
-    kStatus_SDMMC_SwitchFailed           = MAKE_STATUS(kStatusGroup_SDMMC, 16),/*!< SwitchFunction failed */ 
-    kStatus_SDMMC_StopTransmissionFailed = MAKE_STATUS(kStatusGroup_SDMMC, 17),/*!< StopTransmission failed */
-    kStatus_SDMMC_SendStatusFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 18),/*!< SendStatus failed */
-    kStatus_SDMMC_SetBlockCountFailed    = MAKE_STATUS(kStatusGroup_SDMMC, 19),/*!< SetBlockCount failed*/
-    kStatus_SDMMC_SetRelativeAddrFailed  = MAKE_STATUS(kStatusGroup_SDMMC, 20),/*!< SetRelativeAddr failed */ 
-    kStatus_SDMMC_GetPowerClassFailed    = MAKE_STATUS(kStatusGroup_SDMMC, 21),/*!< Get power class failed */
-    kStatus_SDMMC_SetPowerClassFailed    = MAKE_STATUS(kStatusGroup_SDMMC, 22),/*!< Set power class failed */
-    kStatus_SDMMC_BusTestProcessFailed   = MAKE_STATUS(kStatusGroup_SDMMC, 23),/*!< Bus test process failed */
-    kStatus_SDMMC_SwitchHighSpeedFailed  = MAKE_STATUS(kStatusGroup_SDMMC, 24),/*!< Switch high speed failed */
-    kStatus_SDMMC_SendExtCsdFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 25),/*!< SendExtCsd failed */
-    kStatus_SDMMC_NotEraseGroupAddress   = MAKE_STATUS(kStatusGroup_SDMMC, 26),/*!< Erase address is not erase group address */
-    kStatus_SDMMC_ConfigBootFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 27),/*!< Configure boot feature failed */
+    kStatus_SDMMC_TransferDataFailed     = MAKE_STATUS(kStatusGroup_SDMMC, 2),/*!< Send command failed */ 
+    kStatus_SDMMC_SetCardBlockSizeFailed = MAKE_STATUS(kStatusGroup_SDMMC, 3),/* Set card block size failed */
+    kStatus_SDMMC_CardNotSupport         = MAKE_STATUS(kStatusGroup_SDMMC, 4),/*!< Card doesn't support */ 
+    kStatus_SDMMC_AllSendCidFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 5),/*!< AllSendCid failed */
+    kStatus_SDMMC_SendRcaFailed          = MAKE_STATUS(kStatusGroup_SDMMC, 6),/*!< SendRca failed */
+    kStatus_SDMMC_SendCsdFailed          = MAKE_STATUS(kStatusGroup_SDMMC, 7),/*!< SendCsd failed */
+    kStatus_SDMMC_SelectCardFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 8),/*!< SelectCard failed */
+    kStatus_SDMMC_SendScrFailed          = MAKE_STATUS(kStatusGroup_SDMMC, 9),/*!< SendScr failed */ 
+    kStatus_SDMMC_SetBusWidthFailed      = MAKE_STATUS(kStatusGroup_SDMMC, 10),/*!< SetBusWidth failed */
+    kStatus_SDMMC_GoIdleFailed           = MAKE_STATUS(kStatusGroup_SDMMC, 11),/*!< GoIdle failed */
+    kStatus_SDMMC_SendOpCondFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 12),/*!< SendOpCond failed */
+    kStatus_SDMMC_EraseFailed            = MAKE_STATUS(kStatusGroup_SDMMC, 13),/*!< Erase failed */
+    kStatus_SDMMC_SendAppCmdFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 14),/*!< Send application command failed */
+    kStatus_SDMMC_SwitchFailed           = MAKE_STATUS(kStatusGroup_SDMMC, 15),/*!< SwitchFunction failed */ 
+    kStatus_SDMMC_StopTransmissionFailed = MAKE_STATUS(kStatusGroup_SDMMC, 16),/*!< StopTransmission failed */
+    kStatus_SDMMC_SendStatusFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 17),/*!< SendStatus failed */
+    kStatus_SDMMC_SetBlockCountFailed    = MAKE_STATUS(kStatusGroup_SDMMC, 18),/*!< SetBlockCount failed*/
+    kStatus_SDMMC_SetRcaFailed           = MAKE_STATUS(kStatusGroup_SDMMC, 19),/*!< SetRelativeAddr failed */ 
+    kStatus_SDMMC_GetPowerClassFailed    = MAKE_STATUS(kStatusGroup_SDMMC, 20),/*!< Get power class failed */
+    kStatus_SDMMC_SetPowerClassFailed    = MAKE_STATUS(kStatusGroup_SDMMC, 21),/*!< Set power class failed */
+    kStatus_SDMMC_BusTestProcessFailed   = MAKE_STATUS(kStatusGroup_SDMMC, 22),/*!< Bus test process failed */
+    kStatus_SDMMC_SwitchHighSpeedFailed  = MAKE_STATUS(kStatusGroup_SDMMC, 23),/*!< Switch high speed failed */
+    kStatus_SDMMC_SendExtCsdFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 24),/*!< SendExtCsd failed */
+    kStatus_SDMMC_ConfigBootFailed       = MAKE_STATUS(kStatusGroup_SDMMC, 25),/*!< Configure boot feature failed */
 } sdmmc_status_t;
 
-
+/*! @brief SD card capability */
+typedef enum _sd_card_flag
+{
+    kSd_HighCapacity                = (1U << 1U),  /*!< Card is high capacity */
+    kSd_Support4BitWidth            = (1U << 2U),  /*!< Support 4-bit data width */
+    kSd_IsSDHC                      = (1U << 3U),  /*!< Card is SDHC */
+    kSd_IsSDXC                      = (1U << 4U),  /*!< Card is SDXC */
+} sd_card_flag_t;
 
 /*!
- * @brief SD Card Structure
+ * @brief SD card descritpr
  *
  * Defines the card structure including the necessary fields to identify and
  * describe the card.
@@ -94,11 +96,7 @@ typedef struct SDCard
     sdhc_host_t * host;          /*!< Host state information */
     uint32_t rca;                /*!< Relative address of the card */
     uint32_t version;            /*!< Card version */
-    uint32_t caps;               /*!< Capability mask */
-#define SD_CAPS_HIGH_CAPACITY    (1U << 1U)/*!< Card is high capacity */
-#define SD_CAPS_BUS_WIDTH_4BITS  (1U << 2U)/*!< Support 4-bit data width */
-#define SD_CAPS_SDHC             (1U << 3U)/*!< Card is SDHC */
-#define SD_CAPS_SDXC             (1U << 4U)/*!< Card is SDXC */
+    uint32_t flags;               /*!< Capability mask */
     uint32_t rawCid[4];          /*!< Raw CID content */
     uint32_t rawCsd[4];          /*!< Raw CSD content */
     uint32_t rawScr[2];          /*!< Raw CSD content */
@@ -111,22 +109,29 @@ typedef struct SDCard
 } sd_card_t;
 
 /* Checks if card support 4 bit width */
-#define DOES_SD_SUPPORT_4BITS(x)          ((x)->caps & SD_CAPS_BUS_WIDTH_4BITS)
-/* Checks if card support high speed mode. */
-#define IS_SD_HIGH_CAPACITY(x)            ((x)->caps & SD_CAPS_HIGH_CAPACITY)
+#define DOES_SD_SUPPORT_4BITS(x)          ((x)->flags & kSd_Support4BitWidth)
 
+/*!< MMC card flags */
+typedef enum _mmc_card_flag
+{
+    kMMC_HighSpeed             = (1U << 0U),   /*!< Card is high speed card */
+    kMMC_HighSpeedIs52MHZ      = (1U << 1U),   /*!< Card support high speed 52MHZ */
+    kMMC_HighSpeedIs26MHZ      = (1U << 2U),   /*!< Card support high speed 26MHZ */
+    kMMC_HighCapacity          = (1U << 3U),   /*!< Card is high capacity */
+} mmc_card_flag_t;
+
+/*!
+ * @brief SD card descritpr
+ *
+ * Defines the card structure including the necessary fields to identify and
+ * describe the card.
+ */
 typedef struct MMCCard
 {
     sdhc_host_t * host;                         /*!< Host state information */
     uint32_t rca;                               /*!< Relative address of the card */
     bool enablePreDefBlkCnt;                    /*!< Enables PRE-DEFINED block count when read/write*/
-    uint32_t caps;                              /*!< Capability */
-#define MMC_CAPS_HIGH_SPEED        (1U << 0U)   /*!< Card high speed support bit */
-#define MMC_CAPS_HIGH_SPEED_52MHZ  (1U << 1U)   /*!< Card support high speed 52MHZ */
-#define MMC_CAPS_HIGH_SPEED_26MHZ  (1U << 2U)   /*!< Card support high speed 26MHZ */
-#define MMC_CAPS_HIGH_CAPACITY     (1U << 3U)   /*!< Card is high capacity */
-#define MMC_CAPS_EXT_CSD           (1U << 4U)   /*!< Card support switch command */
-#define MMC_CAPS_ALTER_BOOT        (1U << 5U)   /*!< MMC card support alternate boot */
+    uint32_t flags;                              /*!< Capability */
     uint32_t rawCid[4];                         /*!< CID */
     uint32_t rawCsd[4];                         /*!< CSD */
     uint32_t rawExtCsd[MMC_EXT_CSD_LEN_AS_WORD];/*!< MMC EXT_CSD */
@@ -140,22 +145,16 @@ typedef struct MMCCard
     uint32_t writeProtectGroupSize;             /*!< Write protect group size united as erase group size */
     uint32_t bootPartitionSize;                 /*!< Boot partition size united as blocks */          
     mmc_volt_range_t hostVoltRange;             /*!< Host intended volt range */ 
-    mmc_access_partition_t currentPartition;    /*!< Current access partition */
+    mmc_access_part_t currentPartition;    /*!< Current access partition */
 } mmc_card_t;
-
-#define DOES_MMC_SUPPORT_HIGH_SPEED_52MHZ(x)  ((x)->caps & MMC_CAPS_HIGH_SPEED_52MHZ) 
-#define DOES_MMC_SUPPORT_HIGH_SPEED_26MHZ(x)  ((x)->caps & MMC_CAPS_HIGH_SPEED_26MHZ)
-/* Checks if card support high speed mode. */
-#define IS_MMC_HIGH_CAPACITY(x)               ((x)->caps & MMC_CAPS_HIGH_CAPACITY)
-
 
 /*!
  * @brief MMC card boot configuration definition.
  */
 typedef struct MMCBootConfig
 {
-    bool bootAckEnable;                             /*!< Boot ACK enable */
-    mmc_boot_partition_enable_t bootPartitionEnable;/*!< Boot partition */
+    bool enableBootAck;                             /*!< Boot ACK enable */
+    mmc_boot_part_enable_t bootPartition;/*!< Boot partition */
     bool retainBootBusWidth;                        /*!< If retain boot bus width */
     mmc_bus_width_t bootBusWidth;                   /*!< Boot bus width */
 } mmc_boot_config_t;
@@ -175,7 +174,7 @@ extern "C" {
 #endif
 
 /*!
- * @name Card Driver Function
+ * @name Card function
  * @{ 
  */
 
@@ -189,11 +188,6 @@ extern "C" {
  * @return kStatus_SDMMC_NoError on success
  */
 status_t SD_Init(sd_card_t *card);
-
-/*! 
- * @name Operate the card
- * @{ 
- */
 
 /*!
  * @brief Reads blocks from the specific card.

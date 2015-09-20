@@ -43,7 +43,7 @@
 bool MMC_CheckReadOnly(mmc_card_t *card)
 {
     assert(card);
-    return ((card->csd.flags & MMC_CSD_PERM_WRITE_PROTECT) || (card->csd.flags & MMC_CSD_TMP_WRITE_PROTECT)); 
+    return ((card->csd.flags & kMMC_CsdPermWriteProtect) || (card->csd.flags & kMMC_CsdTmpWriteProtect)); 
 }
  
 /*FUNCTION****************************************************************
@@ -173,13 +173,13 @@ static status_t MMC_ValidateVolt(mmc_card_t *card, bool hostVoltRange)
     if (hostVoltRange == kMMC_Volt170to195)
     {
         card->ocr = 0;
-        card->ocr |=  (kMMC_Volt170to195 << MMC_OCR_V170TO195_POS);
+        card->ocr |=  (kMMC_Volt170to195 << MMC_OCR_V170TO195_SHIFT);
         command.argument = card->ocr;
     }
     else
     {
         card->ocr = 0;
-        card->ocr |= (kMMC_Volt270to360 << MMC_OCR_V270TO360_POS);
+        card->ocr |= (kMMC_Volt270to360 << MMC_OCR_V270TO360_SHIFT);
         command.argument = card->ocr;
     }
     command.responseType = kSDHC_ReponseTypeR3;
@@ -192,7 +192,7 @@ static status_t MMC_ValidateVolt(mmc_card_t *card, bool hostVoltRange)
         err = SDHC_SendCmdBlocking(host, FSL_CARD_COMMAND_TIMEOUT);
         if (kStatus_Success == err)
         {
-            if(!((command->response[0] & MMC_OCR_BUSY_MASK) >> MMC_OCR_BUSY_POS))/* Return busy state */
+            if(!((command->response[0] & MMC_OCR_BUSY_MASK) >> MMC_OCR_BUSY_SHIFT))/* Return busy state */
             {
                 continue;
             }
@@ -241,7 +241,7 @@ static status_t MMC_SetRelativeAddress(mmc_card_t *card)
         || (!SDMMC_R1_ERROR_BITS(command->response[0]))) 
     {
         card->rca = MMC_DEFAULT_RSA;      
-        return kStatus_SDMMC_SetRelativeAddrFailed;
+        return kStatus_SDMMC_SendCommandFailed;
     }
 
     return kStatus_Success;
@@ -259,23 +259,23 @@ static void MMC_CalculateTotalBlockCount(mmc_card_t *card)
     uint32_t blkSizeDef = FSL_CARD_DEFAULT_BLOCK_SIZE;/* Default block size after power on */    
     assert(card);
     
-    c_size                   = card->csd.c_size;
+    c_size = card->csd.c_size;
     /*  For higher than 2GB of density of card the maximum possible value should be set to this register (0xFFF) */
     if(c_size != 0xFFF)
     {
-        c_size_mult              = card->csd.c_size_mult;
-        mult                     = (2 << (c_size_mult + 2 - 1));
-        read_bl_len              = card->csd.readBlkLen;
-        block_len                = (2 << (read_bl_len - 1));
+        c_size_mult = card->csd.c_size_mult;
+        mult = (2 << (c_size_mult + 2 - 1));
+        read_bl_len = card->csd.readBlkLen;
+        block_len = (2 << (read_bl_len - 1));
         
-        card->blockCount         = (((c_size + 1)*mult)/blkSizeDef);        
+        card->blockCount = (((c_size + 1)*mult)/blkSizeDef);        
     }
     else /* For higher than 2GB of density of card, the device size represented by sector-count field in the EXT_CSD */
     {
-        card->blockCount         = card->extCsd.sectorCount;          
-        card->caps              |= MMC_CAPS_HIGH_CAPACITY;
+        card->blockCount = card->extCsd.sectorCount;          
+        card->flags |= kMMC_HighCapacity;
     }
-    card->blockSize              = FSL_CARD_DEFAULT_BLOCK_SIZE;
+    card->blockSize = FSL_CARD_DEFAULT_BLOCK_SIZE;
 }
 
 /*FUNCTION****************************************************************
@@ -292,10 +292,10 @@ static void MMC_DecodeCsd(uint32_t *rawCsd, mmc_card_t *card)
 
     csd = &(card->csd);
     csd->csdStructVer = (uint8_t)((rawCsd[3] & 0xC0000000U) >> 30);
-    csd->sysSpecVer   = (uint8_t)((rawCsd[3] & 0x30000000U) >> 28);
+    csd->sysSpecVer = (uint8_t)((rawCsd[3] & 0x30000000U) >> 28);
     if(4 == csd->sysSpecVer)
     {
-         card->caps |= MMC_CAPS_HIGH_SPEED;         
+        card->flags |= kMMC_HighSpeed;         
     }
     csd->taac = (uint8_t)((rawCsd[3] & 0xFF0000) >> 16);
     csd->nsac = (uint8_t)((rawCsd[3] & 0xFF00) >> 8);
@@ -305,19 +305,19 @@ static void MMC_DecodeCsd(uint32_t *rawCsd, mmc_card_t *card)
     csd->readBlkLen = (uint8_t)((rawCsd[2] & 0xF0000) >> 16);
     if (rawCsd[2] & 0x8000)
     {
-        csd->flags |= MMC_CSD_READ_BL_PARTIAL;
+        csd->flags |= kMMC_CsdReadBlockPartial;
     }
     if (rawCsd[2] & 0x4000)
     {
-        csd->flags |= MMC_CSD_WRITE_BLOCK_MISALIGN;
+        csd->flags |= kMMC_CsdWriteBlockMisalign;
     }
     if (rawCsd[2] & 0x2000)
     {
-        csd->flags |= MMC_CSD_READ_BLOCK_MISALIGN;
+        csd->flags |= kMMC_CsdReadBlockMisalign;
     }
     if (rawCsd[2] & 0x1000)
     {
-        csd->flags |= MMC_CSD_DSR_IMP;
+        csd->flags |= kMMC_CsdDsrImplemented;
     }
     csd->c_size = (uint16_t)(((rawCsd[2]&0x300)<<2) + ((rawCsd[2]&0xFF) << 2) 
                                + (rawCsd[1]&0xC0000000)>>30 );
@@ -325,43 +325,43 @@ static void MMC_DecodeCsd(uint32_t *rawCsd, mmc_card_t *card)
     csd->vdd_r_cur_max = (uint8_t)((rawCsd[1]&0x07000000)>>24);
     csd->vdd_w_cur_min = (uint8_t)((rawCsd[1]&0x00E00000)>>21);
     csd->vdd_w_cur_max = (uint8_t)((rawCsd[1]&0x001C0000)>>18);
-    csd->c_size_mult   = (uint8_t)((rawCsd[1]&0x00038000)>>15);
-    csd->eraseGrpSize  = (uint8_t)((rawCsd[1]&0x00007C00)>>10);
+    csd->c_size_mult = (uint8_t)((rawCsd[1]&0x00038000)>>15);
+    csd->eraseGrpSize = (uint8_t)((rawCsd[1]&0x00007C00)>>10);
     csd->eraseGrpSizeMult = (uint8_t)((rawCsd[1]&0x000003E0)>>5);
-    csd->wpGrpSize     = (uint8_t)(rawCsd[1]&0x0000001F);
+    csd->wpGrpSize = (uint8_t)(rawCsd[1]&0x0000001F);
     if(rawCsd[0] & 0x80000000)
     {
-        csd->flags |= MMC_CSD_WP_GRP_ENABLED;
+        csd->flags |= kMMC_CsdWPGroupEnabled;
     }
-    csd->defaultEcc    = (uint8_t)((rawCsd[0] & 0x60000000) >> 29);
+    csd->defaultEcc = (uint8_t)((rawCsd[0] & 0x60000000) >> 29);
     csd->writeSpeedFactor = (uint8_t)((rawCsd[0] & 0x1C000000) >> 26); 
-    csd->maxWriteBlkLen   = (uint8_t)((rawCsd[0] & 0x03C00000) >> 22);
+    csd->maxWriteBlkLen = (uint8_t)((rawCsd[0] & 0x03C00000) >> 22);
     if(rawCsd[0] & 0x00200000)
     {
-        csd->flags |= MMC_CSD_WRITE_BL_PARTIAL;
+        csd->flags |= kMMC_CsdWriteBlockPartial;
     }
     if(rawCsd[0] & 0x00010000)
     {
-        csd->flags |= MMC_CSD_CONTENT_PROT_APP;
+        csd->flags |= kMMC_ContentProtectApp;
     }
     if(rawCsd[0] & 0x00008000)
     {
-        csd->flags |= MMC_CSD_FILE_FORMAT_GROUP;
+        csd->flags |= kMMC_CsdFileFormatGroup;
     }
     if(rawCsd[0] & 0x00004000)
     {
-        csd->flags |= MMC_CSD_COPY;
+        csd->flags |= kMMC_CsdCopy;
     }
     if(rawCsd[0] & 0x00002000)
     {
-        csd->flags |= MMC_CSD_PERM_WRITE_PROTECT;
+        csd->flags |= kMMC_CsdPermWriteProtect;
     }
     if(rawCsd[0] & 0x00001000)
     {
-        csd->flags |= MMC_CSD_TMP_WRITE_PROTECT;
+        csd->flags |= kMMC_CsdTmpWriteProtect;
     }
     csd->fileFormat = (uint8_t)((rawCsd[0] & 0x00000C00) >> 10);
-    csd->eccCode    = (uint8_t)((rawCsd[0] & 0x00000300) >> 8);
+    csd->eccCode = (uint8_t)((rawCsd[0] & 0x00000300) >> 8);
 
     /* Calculate the device size */
     MMC_CalculateTotalBlockCount(card); 
@@ -403,8 +403,8 @@ static status_t MMC_SetToMaxClockInNormalMode(mmc_card_t *card)
     uint32_t g_mult10InTranSpeed[]   = {0, 10, 12, 13, 15, 20, 26, 30, 35, 40, 45,\
                                52, 55, 60, 70, 80};
     
-    freqUnit = g_freqUnitInTranSpeed[RD_MMC_CSD_TRAN_SPEED_FREQ_UNIT(card->csd)];
-    multFactor = g_mult10InTranSpeed[RD_MMC_CSD_TRAN_SPPED_MULT_FACTOR(card->csd)];
+    freqUnit = g_freqUnitInTranSpeed[RD_MMC_TRAN_SPEED_FREQ_UNIT(card->csd)];
+    multFactor = g_mult10InTranSpeed[RD_MMC_TRAN_SPEED_MULT(card->csd)];
     maxFreqInNormal = (fsdhcCmdUnitInCsd*mult10InCsd)/MULT_DIV_IN_TRAN_SPEED;
 
     sdClockConfig.enableSdClock = true;
@@ -428,7 +428,7 @@ static void MMC_CalculateLegacyEraseUnitSize(mmc_card_t *card)
     
     erase_group_size = card->csd.eraseGrpSize;
     erase_group_mult = card->csd.eraseGrpSizeMult;
-    card->eraseGroupSize  = ((erase_group_size + 1)*(erase_group_mult + 1));
+    card->eraseGroupSize = ((erase_group_size + 1)*(erase_group_mult + 1));
     card->writeProtectGroupSize = (card->csd.wpGrpSize + 1);
 }
 
@@ -492,10 +492,10 @@ static status_t MMC_SetExtCsdByte(mmc_card_t *card, mmc_ext_csd_operation_t *ope
     uint32_t param = 0;
     status_t err = kStatus_Success;  
     
-    param |= (operation->cmdSet << MMC_SWITCH_PARAM_CMD_SET_POS);
-    param |= (operation->value << MMC_SWITCH_PARAM_VALUE_POS);
-    param |= (operation->indexOfByte << MMC_SWITCH_PARAM_INDEX_OF_BYTE_POS);
-    param |= (operation->accessMode << MMC_SWITCH_PARAM_ACCESS_MODE_POS);
+    param |= (operation->cmdSet << MMC_SWITCH_CMD_SET_SHIFT);
+    param |= (operation->value << MMC_SWITCH_VALUE_SHIFT);
+    param |= (operation->indexOfByte << MMC_SWITCH_INDEX_OF_BYTE_SHIFT);
+    param |= (operation->accessMode << MMC_SWITCH_ACCESS_MODE_SHIFT);
     
     command.index = kMMC_Switch;
     command.argument = param;
@@ -533,7 +533,7 @@ static void MMC_EnableHighCapacityEraseUnitSize(mmc_card_t *card)
     assert(card);
 
     operation.accessMode = kMMC_ExtCsdSetBits;
-    operation.indexOfByte = MMC_EXT_CSD_ERASE_GRP_DEF_INDEX;
+    operation.indexOfByte = kMMC_ExtCsdIndexEraseGroupDef;
     operation.value = 0x01;/* The high capacity erase unit size enablement bit is bit 0*/
     MMC_SetExtCsdByte(card, &operation);
 }
@@ -550,40 +550,40 @@ static status_t MMC_DecodeExtCsd(uint32_t *rawExtCsd, mmc_card_t *card)
     assert(rawExtCsd);
     assert(card);
     
-    extCsd                        = &(card->extCsd);
-    extCsd->supportedCmdSet       = (rawExtCsd[1]&0x000000FF);
-    extCsd->bootInfo              = (rawExtCsd[70]&0x000000FF);
+    extCsd = &(card->extCsd);
+    extCsd->supportedCmdSet = (rawExtCsd[1]&0x000000FF);
+    extCsd->bootInfo = (rawExtCsd[70]&0x000000FF);
     if(kMMC_SupportAlterBoot == extCsd->bootInfo)
     {/* Card support alternate boot*/
-        card->caps               |= MMC_CAPS_ALTER_BOOT;
+        card->flags |= MMC_flags_ALTER_BOOT;
     }
-    extCsd->bootSizeMult          = ((rawExtCsd[71]&0x00FF0000)>>16);
+    extCsd->bootSizeMult = ((rawExtCsd[71]&0x00FF0000)>>16);
     /* Get boot partition size*/
-    card->bootPartitionSize      = ((128*1024*extCsd->bootSizeMult)
+    card->bootPartitionSize = ((128*1024*extCsd->bootSizeMult)
                                     /FSL_CARD_DEFAULT_BLOCK_SIZE);
       
-    extCsd->accessSize            = ((rawExtCsd[71]&0x0000FF00)>>8);
-    extCsd->HC_ERASE_GRP_SIZE     = ((rawExtCsd[71]&0x000000FF));
-    extCsd->ERASE_TIMEOUT_MULT    = ((rawExtCsd[72]&0xFF000000)>>24);
+    extCsd->accessSize = ((rawExtCsd[71]&0x0000FF00)>>8);
+    extCsd->HC_ERASE_GRP_SIZE = ((rawExtCsd[71]&0x000000FF));
+    extCsd->ERASE_TIMEOUT_MULT = ((rawExtCsd[72]&0xFF000000)>>24);
     extCsd->reliableWriteSectorCount = ((rawExtCsd[72]&0x00FF0000)>>16);
-    extCsd->hc_wp_grp_size        = ((rawExtCsd[72]&0x0000FF00)>>8);
-    extCsd->sleepCurrentVCC       = (rawExtCsd[72]&0x000000FF);
-    extCsd->sleepCurrentVCCQ      = ((rawExtCsd[73]&0xFF000000)>>24);
-    extCsd->slpAwkTimeout         = ((rawExtCsd[73]&0x0000FF00)>>8);
-    extCsd->sectorCount           = rawExtCsd[74];
-    extCsd->MIN_PERF_W_8_52       = ((rawExtCsd[75]&0x00FF0000)>>16);
-    extCsd->MIN_PERF_R_8_52       = ((rawExtCsd[75]&0x0000FF00)>>8);
-    extCsd->MIN_PERF_W_8_26_4_52  = (rawExtCsd[75]&0x000000FF);
-    extCsd->MIN_PERF_R_8_26_4_52  = ((rawExtCsd[76]&0xFF000000)>>24);
-    extCsd->MIN_PERF_W_4_26       = ((rawExtCsd[76]&0x00FF0000)>>16);
-    extCsd->MIN_PERF_R_4_26       = ((rawExtCsd[76]&0x0000FF00)>>8);
-    extCsd->PWR_CL_26_360         = ((rawExtCsd[77]&0xFF000000)>>24);
-    extCsd->PWR_CL_52_360         = ((rawExtCsd[77]&0x00FF0000)>>16);
-    extCsd->PWR_CL_26_195         = ((rawExtCsd[77]&0x0000FF00)>>8);
-    extCsd->PWR_CL_52_195         = (rawExtCsd[77]&0x000000FF);
-    extCsd->cardType              = (rawExtCsd[78]&0x000000FF);
-    extCsd->csdStrucVer           = ((rawExtCsd[79]&0x00FF0000)>>16);
-    extCsd->extCsdVer             = (rawExtCsd[79]&0x000000FF);
+    extCsd->hc_wp_grp_size = ((rawExtCsd[72]&0x0000FF00)>>8);
+    extCsd->sleepCurrentVCC = (rawExtCsd[72]&0x000000FF);
+    extCsd->sleepCurrentVCCQ = ((rawExtCsd[73]&0xFF000000)>>24);
+    extCsd->slpAwkTimeout = ((rawExtCsd[73]&0x0000FF00)>>8);
+    extCsd->sectorCount = rawExtCsd[74];
+    extCsd->MIN_PERF_W_8_52 = ((rawExtCsd[75]&0x00FF0000)>>16);
+    extCsd->MIN_PERF_R_8_52 = ((rawExtCsd[75]&0x0000FF00)>>8);
+    extCsd->MIN_PERF_W_8_26_4_52 = (rawExtCsd[75]&0x000000FF);
+    extCsd->MIN_PERF_R_8_26_4_52 = ((rawExtCsd[76]&0xFF000000)>>24);
+    extCsd->MIN_PERF_W_4_26 = ((rawExtCsd[76]&0x00FF0000)>>16);
+    extCsd->MIN_PERF_R_4_26 = ((rawExtCsd[76]&0x0000FF00)>>8);
+    extCsd->PWR_CL_26_360 = ((rawExtCsd[77]&0xFF000000)>>24);
+    extCsd->PWR_CL_52_360 = ((rawExtCsd[77]&0x00FF0000)>>16);
+    extCsd->PWR_CL_26_195 = ((rawExtCsd[77]&0x0000FF00)>>8);
+    extCsd->PWR_CL_52_195 = (rawExtCsd[77]&0x000000FF);
+    extCsd->cardType = (rawExtCsd[78]&0x000000FF);
+    extCsd->csdStrucVer = ((rawExtCsd[79]&0x00FF0000)>>16);
+    extCsd->extCsdVer = (rawExtCsd[79]&0x000000FF);
     /* If ext_csd version is V4.3, high capacity erase feature can only be enabled
     in MMC V4.3 */
     if(extCsd->extCsdVer == kMMC_ExtCsdVer13)
@@ -591,15 +591,15 @@ static status_t MMC_DecodeExtCsd(uint32_t *rawExtCsd, mmc_card_t *card)
         /* Enable the high capacity erase unit */
         MMC_EnableHighCapacityEraseUnitSize(card);
     }
-    extCsd->cmdSet                = ((rawExtCsd[80]&0xFF000000)>>24);  
-    extCsd->cmdSetRev             = ((rawExtCsd[80]&0x0000FF00)>>8);
+    extCsd->cmdSet = ((rawExtCsd[80]&0xFF000000)>>24);  
+    extCsd->cmdSetRev = ((rawExtCsd[80]&0x0000FF00)>>8);
     extCsd->powerClass = ((rawExtCsd[81]&0xFF000000)>>24);
     extCsd->highSpeedTiming = ((rawExtCsd[81]&0x0000FF00)>>8);
-    extCsd->busWidth              = ((rawExtCsd[82]&0xFF000000)>>24);
-    extCsd->erasedMemCnt          = ((rawExtCsd[82]&0x0000FF00)>>8);
-    extCsd->bootConfig            = ((rawExtCsd[83]&0xFF000000)>>24);
-    extCsd->bootBusWidth          = ((rawExtCsd[83]&0x0000FF00)>>8);
-    extCsd->ERASE_GROUP_DEF       = ((rawExtCsd[84]&0xFF000000)>>24);
+    extCsd->busWidth = ((rawExtCsd[82]&0xFF000000)>>24);
+    extCsd->erasedMemCnt = ((rawExtCsd[82]&0x0000FF00)>>8);
+    extCsd->bootConfig = ((rawExtCsd[83]&0xFF000000)>>24);
+    extCsd->bootBusWidth = ((rawExtCsd[83]&0x0000FF00)>>8);
+    extCsd->ERASE_GROUP_DEF = ((rawExtCsd[84]&0xFF000000)>>24);
     /* Calculate the erase unit size */
     MMC_CalculateEraseUnitSize(card);
     return kStatus_Success;
@@ -627,10 +627,10 @@ static status_t MMC_SendExtCsd(mmc_card_t *card)
     command.argument = 0;
     command.responseType = kSDHC_ReponseTypeR1;
 
-    data.flags    = CARD_DATA_FLAGS_DATA_READ;
+    data.flags = CARD_DATA_FLAGS_DATA_READ;
     data.blockCount = 1;
-    data.blockSize  = MMC_EXT_CSD_LEN_AS_BYTE;
-    data.buffer     = card->rawExtCsd;
+    data.blockSize = MMC_EXT_CSD_LEN_AS_BYTE;
+    data.buffer = card->rawExtCsd;
 
     host->currentCmd = &command;
     host->currentData = &data;
@@ -639,12 +639,15 @@ static status_t MMC_SendExtCsd(mmc_card_t *card)
         && (SDMMC_R1_ERROR_BITS(command->response[0]))
         && (kStatus_Success == SDHC_WaitDataTransferComplete(host, FSL_CARD_COMMAND_TIMEOUT)))
     {        
-        /*The response is from bit 127:8 in R2, corrsponding to command->response[3]
-        :command->response[0][31:8]*/
+        /*The response is from bit 127:8 in R2, corrsponding to command->response[3]:command->response[0][31:8]*/
         for(index = 0; index < MMC_EXT_CSD_LEN_AS_WORD; index++)
         {
-            card->rawExtCsd[index] = swap_be32(card->rawExtCsd[index]);
+            if (kSDHC_EndianModeLittle == host->sdhcConfig.endianMode)
+            {
+                card->rawExtCsd[index] = SWAP_UINT32_IN_LITTLE_ENDIAN(card->rawExtCsd[index]);
+            }
         }
+
         MMC_DecodeExtCsd(card->rawExtCsd, card);
         
         return kStatus_Success;
@@ -665,13 +668,13 @@ static status_t MMC_GetHighSpeedFreqence(mmc_card_t *card)
 
     /* This field defines the type of the card. The only currently valid values \
     for this field are 0x01 and 0x03. */
-    if(kMMC_HighSpeedFreqAt26MHZ == RD_CARD_TYPE_HSFREQ_26MHZ(card->extCsd))
+    if (card->extCsd.cardType & kMMC_CardTypeHSFreq26MHZ)
     {
-        card->caps  |= MMC_CAPS_HIGH_SPEED_26MHZ;
+        card->flags |= kMMC_HighSpeedIs26MHZ;
     }
-    else if(kMMC_HighSpeedFreqAt52MHZ == RD_CARD_TYPE_HSFREQ_52MHZ(card->extCsd))
+    else if (card->extCsd.cardType & kMMC_CardTypeHSFreq52MHZ)
     {
-        card->caps  |= MMC_CAPS_HIGH_SPEED_52MHZ;
+        card->flags |= kMMC_HighSpeedIs52MHZ;
     }
     else
     {
@@ -704,20 +707,20 @@ static status_t MMC_GetPowerClass(mmc_card_t *card, uint8_t *powerClass, mmc_bus
     {
         mask = MMC_EXT_CSD_PWRCLFFVV_8BIT_MASK; /* the mask of 8 bit bus width's power class*/  
     }
-    if ( DOES_MMC_SUPPORT_HIGH_SPEED_52MHZ(card) && (kMMC_Volt170to195 == card->hostVoltRange) )
+    if ((card->flags & kMMC_HighSpeedIs52MHZ) && (kMMC_Volt170to195 == card->hostVoltRange) )
     {
         *powerClass = ((card->extCsd.PWR_CL_52_195) & mask);
     }
-    else if(DOES_MMC_SUPPORT_HIGH_SPEED_52MHZ(card) && (kMMC_Volt270to360 == card->hostVoltRange))
+    else if((card->flags & kMMC_HighSpeedIs52MHZ) && (kMMC_Volt270to360 == card->hostVoltRange))
     {
         *powerClass = ((card->extCsd.PWR_CL_52_360) & mask);
     }
-    else if(DOES_MMC_SUPPORT_HIGH_SPEED_26MHZ(card) && (kMMC_Volt170to195 == card->hostVoltRange))
+    else if((card->flags & kMMC_HighSpeedIs26MHZ) && (kMMC_Volt170to195 == card->hostVoltRange))
     {
         /* 8 bit at 26MHZ/195V*/
         *powerClass = ((card->extCsd.PWR_CL_26_195) & mask);
     }
-    else if(DOES_MMC_SUPPORT_HIGH_SPEED_26MHZ(card) && (kMMC_Volt270to360 == card->hostVoltRange))
+    else if((card->flags & kMMC_HighSpeedIs26MHZ) && (kMMC_Volt270to360 == card->hostVoltRange))
     {
         /* 8 bit at 26MHZ/360V*/
         *powerClass = ((card->extCsd.PWR_CL_26_360) & mask);
@@ -792,8 +795,8 @@ static status_t MMC_GetTestPattern(mmc_card_t *card, uint32_t blockSize, uint32_
     command.responseType = kSDHC_ReponseTypeR1;
 
     data.blockCount = 1;
-    data.blockSize  = blockSize;
-    data.buffer     = buffer;
+    data.blockSize = blockSize;
+    data.buffer = buffer;
     data.flags |= CARD_DATA_FLAGS_DATA_READ;
 
     host->currentCmd = &command;
@@ -829,14 +832,14 @@ static status_t MMC_BusTestProc(mmc_card_t *card, mmc_bus_width_t busWidth)
     For only 1 data line the data block would be: 0x80*/
     if(kMMC_BusWidth8b == busWidth)
     {
-        blockSize  = 8;
-        sendPattern[0]  = MMC_8BIT_BUS_TEST_PATTERN;
-        sendPattern[1]  = 0;        
+        blockSize = 8;
+        sendPattern[0] = MMC_8BIT_BUS_TEST_PATTERN;
+        sendPattern[1] = 0;        
     }
     else if(kMMC_BusWidth4b == busWidth)
     {
-        blockSize  = 4;
-        sendPattern[0]  = MMC_4BIT_BUS_TEST_PATTERN;
+        blockSize = 4;
+        sendPattern[0] = MMC_4BIT_BUS_TEST_PATTERN;
     }
     else
     {
@@ -900,7 +903,7 @@ static status_t MMC_SetBusWidth(mmc_card_t *card, mmc_bus_width_t busWidth)
 
     /* Set power class of pointed bus width */
     extCsdOperation.accessMode = kMMC_ExtCsdWriteBits;
-    extCsdOperation.indexOfByte = MMC_EXT_CSD_POWER_CLASS_INDEX;
+    extCsdOperation.indexOfByte = kMMC_ExtCsdIndexPowerClass;
     extCsdOperation.value = powerClassAt8bit;
     if(kStatus_Success != MMC_SetExtCsdByte(card, &extCsdOperation))
     {
@@ -909,7 +912,7 @@ static status_t MMC_SetBusWidth(mmc_card_t *card, mmc_bus_width_t busWidth)
 
     /* Set bus width of pointed bus width */
     extCsdOperation.accessMode = kMMC_ExtCsdWriteBits;
-    extCsdOperation.indexOfByte = MMC_EXT_CSD_BUS_WIDTH_INDEX;
+    extCsdOperation.indexOfByte = kMMC_ExtCsdIndexBusWidth;
     extCsdOperation.value = busWidth;      
     if(kStatus_Success != MMC_SetExtCsdByte(card, &extCsdOperation))
     {
@@ -935,7 +938,7 @@ static status_t MMC_SwitchHighSpeed(mmc_card_t *card)
     {       
         /* Switch to high speed timing */
         extCsdOperation.accessMode = kMMC_ExtCsdWriteBits;
-        extCsdOperation.indexOfByte = MMC_EXT_CSD_HS_TIMING_INDEX;
+        extCsdOperation.indexOfByte = kMMC_ExtCsdIndexHSTiming;
         extCsdOperation.value = kMMC_HighSpeedTiming;
         if(kStatus_Success != MMC_SetExtCsdByte(card, &extCsdOperation))
         {
@@ -946,14 +949,14 @@ static status_t MMC_SwitchHighSpeed(mmc_card_t *card)
             return kStatus_Fail;
         }
         /* Switch to corresponding fsdhcCmduence in high speed mode  */
-        if(DOES_MMC_SUPPORT_HIGH_SPEED_52MHZ(card))
+        if((card->flags & kMMC_HighSpeedIs52MHZ) )
         {
             sdClockConfig.enableSdClock = true;
             sdClockConfig.baseClockFreq = host->capability->sourceClockFreq;
             sdClockConfig.sdClockFreq = MMC_CLK_52MHZ;    
             SDHC_SetSdClockConfig(host->base, &sdClockConfig);
         }
-        else if(DOES_MMC_SUPPORT_HIGH_SPEED_26MHZ(card))
+        else if((card->flags & kMMC_HighSpeedIs26MHZ))
         {
             sdClockConfig.enableSdClock = true;
             sdClockConfig.baseClockFreq = host->capability->sourceClockFreq;
@@ -981,9 +984,9 @@ static void MMC_DecodeCid(uint32_t *rawCid, mmc_card_t *card)
     assert(card);
     cid = &(card->cid);
 
-    cid->mid           = (uint8_t)((rawCid[3] & 0xFF000000) >> 24);
+    cid->mid = (uint8_t)((rawCid[3] & 0xFF000000) >> 24);
 
-    cid->oid           = (uint16_t)((rawCid[3] & 0xFFFF00) >> 8);
+    cid->oid = (uint16_t)((rawCid[3] & 0xFFFF00) >> 8);
 
     cid->pnm[0] = (uint8_t)((rawCid[3] & 0xFF));
     cid->pnm[1] = (uint8_t)((rawCid[2] & 0xFF000000U) >> 24);
@@ -1150,7 +1153,7 @@ status_t MMC_Init(mmc_card_t *card)
     /* Set the card address */
     if(kStatus_Success != MMC_SetRelativeAddress(card))
     {
-        return kStatus_SDMMC_SendRcaFailed;
+        return kStatus_SDMMC_SetRcaFailed;
     }
 
     /* Get the CSD register content */
@@ -1162,8 +1165,7 @@ status_t MMC_Init(mmc_card_t *card)
     /* If necessary, adjust the host parameters according to the information in the CSD */
     if(card->csd.sysSpecVer == 4)
     {
-        card->caps |= MMC_CAPS_HIGH_SPEED;
-        card->caps |= MMC_CAPS_EXT_CSD;
+        card->flags |= kMMC_HighSpeed;
     }
     else
     {
@@ -1224,7 +1226,7 @@ static status_t MMC_Erase(mmc_card_t *card, uint32_t eraseGroupStart, uint32_t g
     /* Calculate the start group number and end group number */
     s = eraseGroupStart;
     e = s + groupCount - 1;
-    if(IS_MMC_HIGH_CAPACITY(card))
+    if(card->flags & kMMC_HighCapacity)
     {
         /* The implementation of a higher than 2GB of density of memory will not
       be backwards compatible with the lower densities.First of all the address 
@@ -1303,9 +1305,10 @@ status_t MMC_SelectPartition(mmc_card_t *card, mmc_access_partition_t partitionN
     assert(card);
     
     bootConfig  = card->extCsd.bootConfig;
-    bootConfig |= (partitionNumber << MMC_BOOT_CONFIG_BOOT_PARTITION_ACCESS_POS);
+    bootConfig &= ~MMC_BOOT_CONFIG_PART_ACCESS_MASK;
+    bootConfig |= (partitionNumber << MMC_BOOT_CONFIG_PART_ACCESS_SHIFT);
     extCsdOperation.accessMode = kMMC_ExtCsdWriteBits;
-    extCsdOperation.indexOfByte = MMC_EXT_CSD_BOOT_CONFIG_INDEX;
+    extCsdOperation.indexOfByte = kMMC_ExtCsdIndexBootConfig;
     extCsdOperation.value = bootConfig;      
     if(kStatus_Success != MMC_SetExtCsdByte(card, &extCsdOperation))
     {
@@ -1340,15 +1343,15 @@ status_t MMC_ConfigBoot(mmc_card_t *card, const mmc_boot_config_t *configPtr)
     /* Set the BOOT_CONFIG field of EXT_CSD */
     bootParam = card->extCsd.bootConfig;
 
-    bootParam &= ~(MMC_BOOT_CONFIG_BOOT_ACK_MASK);
-    bootParam &= ~(MMC_BOOT_CONFIG_BOOT_PARTITION_ENABLE_MASK);
+    bootParam &= ~(MMC_BOOT_CONFIG_ACK_MASK);
+    bootParam &= ~(MMC_BOOT_CONFIG_PART_ENABLE_MASK);
     
-    bootParam |= ((configPtr->bootAckEnable ? 1 : 0) << MMC_BOOT_CONFIG_BOOT_ACK_POS);
-    bootParam |= ((configPtr->bootPartitionEnable) << MMC_BOOT_CONFIG_BOOT_PARTITION_ENABLE_POS);
+    bootParam |= ((configPtr->enableBootAck ? 1 : 0) << MMC_BOOT_CONFIG_ACK_SHIFT);
+    bootParam |= ((configPtr->bootPartition) << MMC_BOOT_CONFIG_PART_ENABLE_SHIFT);
     
-    extCsdOperation.accessMode     = kMMC_ExtCsdWriteBits;
-    extCsdOperation.indexOfByte = MMC_EXT_CSD_BOOT_CONFIG_INDEX;
-    extCsdOperation.value       = bootParam;      
+    extCsdOperation.accessMode = kMMC_ExtCsdWriteBits;
+    extCsdOperation.indexOfByte = kMMC_ExtCsdIndexBootConfig;
+    extCsdOperation.value = bootParam;      
     if(kStatus_Success != MMC_SetExtCsdByte(card, &extCsdOperation))
     {
         return kStatus_SDMMC_ConfigBootFailed;
@@ -1362,11 +1365,11 @@ status_t MMC_ConfigBoot(mmc_card_t *card, const mmc_boot_config_t *configPtr)
     bootParam &= ~(MMC_BOOT_BUS_WIDTH_RESET_MASK);
     bootParam &= ~(MMC_BOOT_BUS_WIDTH_WIDTH_MASK);
     
-    bootParam |= ((configPtr->retainBootBusWidth ? 1 : 0) << MMC_BOOT_BUS_WIDTH_RESET_POS);
-    bootParam |= (configPtr->bootBusWidth << MMC_BOOT_BUS_WIDTH_WIDTH_POS);  
+    bootParam |= ((configPtr->retainBootBusWidth ? 1 : 0) << MMC_BOOT_BUS_WIDTH_RESET_SHIFT);
+    bootParam |= (configPtr->bootBusWidth << MMC_BOOT_BUS_WIDTH_WIDTH_SHIFT);  
 
     extCsdOperation.accessMode = kMMC_ExtCsdWriteBits;
-    extCsdOperation.indexOfByte = MMC_EXT_CSD_BUS_WIDTH_INDEX;
+    extCsdOperation.indexOfByte = kMMC_ExtCsdIndexBusWidth;
     extCsdOperation.value = bootParam;      
     if(kStatus_Success != MMC_SetExtCsdByte(card, &extCsdOperation))
     {
@@ -1426,7 +1429,7 @@ static status_t MMC_Read(mmc_card_t *card, uint8_t *buffer, uint32_t startBlock,
 
     host = card->host;
 
-    if ((IS_MMC_HIGH_CAPACITY(card) && (blockSize != 512)) || (blockSize > card->blockSize)
+    if (((card->flags & kMMC_HighCapacity) && (blockSize != 512)) || (blockSize > card->blockSize)
          || (blockSize > card->host->capability->maxBlockLength) || (blockSize % 4))
     {
      return kStatus_SDMMC_CardNotSupport;
@@ -1444,15 +1447,18 @@ static status_t MMC_Read(mmc_card_t *card, uint8_t *buffer, uint32_t startBlock,
     }
     else
     {
-        if ((!host->sdhcConfig->enableAutoCMD12) && (card->enablePreDefBlkCnt))
+        if ((!host->sdhcConfig->enableAutoCmd12) && (card->enablePreDefBlkCnt))
         {
             /* If enabled the pre-define count read/write featue of the card, need to set block count firstly */
-            MMC_SetBlockCount(card, blockCount);
+            if (kStatus_Success != MMC_SetBlockCount(card, blockCount))
+            {
+                return kStatus_SDMMC_SetBlockCountFailed;
+            }
         }         
     }
 
     command.argument = startBlock;
-    if (!IS_MMC_HIGH_CAPACITY(card))
+    if (!(card->flags & kMMC_HighCapacity))
     {
         command.argument *= data.blockSize;
     }
@@ -1469,7 +1475,7 @@ static status_t MMC_Read(mmc_card_t *card, uint8_t *buffer, uint32_t startBlock,
         return kStatus_SDMMC_SendCommandFailed;
     }
 
-    if ((!host->sdhcConfig->enableAutoCMD12) && (!card->enablePreDefBlkCnt))  
+    if ((!host->sdhcConfig->enableAutoCmd12) && (!card->enablePreDefBlkCnt))  
     {
         if (blockCount > 1)
         {
@@ -1505,7 +1511,7 @@ static status_t MMC_Write(mmc_card_t *card, uint8_t *buffer, uint32_t startBlock
     host = card->host;
 
     /* Check address range */
-    if ((IS_MMC_HIGH_CAPACITY(card) && (blockSize != 512)) || (blockSize > card->blockSize)
+    if (((card->flags & kMMC_HighCapacity) && (blockSize != 512)) || (blockSize > card->blockSize)
      || (blockSize > card->host->capability->maxBlockLength) || (blockSize % 4))
     {
      return kStatus_SDMMC_CardNotSupport;
@@ -1522,14 +1528,17 @@ static status_t MMC_Write(mmc_card_t *card, uint8_t *buffer, uint32_t startBlock
     }
     else
     {
-        if ((!host->sdhcConfig->enableAutoCMD12) && (card->enablePreDefBlkCnt))
+        if ((!host->sdhcConfig->enableAutoCmd12) && (card->enablePreDefBlkCnt))
         {
             /* If enabled the pre-define count read/write featue of the card, need to set block count firstly */
-            MMC_SetBlockCount(card, blockCount);
+            if(kStatus_Success != MMC_SetBlockCount(card, blockCount))
+            {
+                return kStatus_SDMMC_SetBlockCountFailed;
+            }
         }
     }
     command.argument = startBlock;
-    if (!IS_MMC_HIGH_CAPACITY(card))
+    if (!(card->flags & kMMC_HighCapacity))
     {
         command.argument *= blockSize;
     }
@@ -1547,7 +1556,7 @@ static status_t MMC_Write(mmc_card_t *card, uint8_t *buffer, uint32_t startBlock
 
     if (blockCount > 1)
     {
-        if ((!host->sdhcConfig->enableAutoCMD12) && (!card->enablePreDefBlkCnt))   
+        if ((!host->sdhcConfig->enableAutoCmd12) && (!card->enablePreDefBlkCnt))   
         {
             if (kStatus_Success != MMC_StopTransmission(card))
             {
@@ -1586,7 +1595,7 @@ status_t MMC_ReadBlocks(mmc_card_t *card,  uint8_t *buffer, uint32_t startBlock,
 
     if ( kStatus_Success != MMC_CheckIORange(card, startBlock, blockCount))
     {
-        return kStatus_SDMMC_InvalidIORange;
+        return kStatus_InvalidArgument;
     }
 
     while(blkLeft)
@@ -1635,7 +1644,7 @@ status_t MMC_WriteBlocks(mmc_card_t *card, uint8_t *buffer, uint32_t startBlock,
 
     if ( kStatus_Success != MMC_CheckIORange(card, startBlock, blockCount))
     {
-        return kStatus_SDMMC_InvalidIORange;
+        return kStatus_InvalidArgument;
     }
 
     while(blkLeft)
@@ -1678,12 +1687,12 @@ status_t MMC_EraseBlocks(mmc_card_t *card, uint32_t startBlock, uint32_t blockCo
     /* startBlock must be group address boundry */
     if ((!(startBlock + 1) % card->eraseGroupSize) || !(blockCount % card->eraseGroupSize))
     {
-        return kStatus_SDMMC_NotEraseGroupAddress;
+        return kStatus_InvalidArgument;
     }
     
     if ( kStatus_Success != MMC_CheckIORange(card, startBlock, blockCount))
     {
-        return kStatus_SDMMC_InvalidIORange;
+        return kStatus_InvalidArgument;
     }
     
     eraseGroupStart = ((startBlock + 1)/card->eraseGroupSize - 1);

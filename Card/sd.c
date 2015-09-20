@@ -44,7 +44,7 @@
 bool SD_CheckReadOnly(sd_card_t *card)
 {
     assert(card);
-    return ((card->csd.flags & SD_CSD_PERM_WRITE_PROTECT) || (card->csd.flags & SD_CSD_TMP_WRITE_PROTECT));   
+    return ((card->csd.flags & kSD_CsdPermWriteProtect) || (card->csd.flags & kSD_CsdTmpWriteProtect));   
 }
 
 /*FUNCTION****************************************************************
@@ -164,19 +164,19 @@ static void SD_DecodeCsd(uint32_t *rawCsd, sd_card_t *card)
     csd->readBlkLen = (uint8_t)((rawCsd[2] & 0xF0000) >> 16);
     if (rawCsd[2] & 0x8000)
     {
-        csd->flags |= SD_CSD_READ_BL_PARTIAL;
+        csd->flags |= kSD_CsdReadBlockPartial;
     }
     if (rawCsd[2] & 0x4000)
     {
-        csd->flags |= SD_CSD_WRITE_BLOCK_MISALIGN;
+        csd->flags |= kSD_CsdReadBlockPartial;
     }
     if (rawCsd[2] & 0x2000)
     {
-        csd->flags |= SD_CSD_READ_BLOCK_MISALIGN;
+        csd->flags |= kSD_CsdReadBlockMisalign;
     }
     if (rawCsd[2] & 0x1000)
     {
-        csd->flags |= SD_CSD_DSR_IMP;
+        csd->flags |= kSD_CsdDsrImplemented;
     }
     if (csd->csdStructure == 0)
     {
@@ -203,43 +203,43 @@ static void SD_DecodeCsd(uint32_t *rawCsd, sd_card_t *card)
         csd->cSize |= (uint32_t)((rawCsd[1] & 0xFFFF0000U) >> 16);
         if (csd->cSize >= 0xFFFF)
         {
-            card->caps |= SD_CAPS_SDXC;
+            card->flags |= kSd_IsSDXC;
         }
         card->blockCount = (csd->cSize + 1) * 1024;
     }
 
     if ((uint8_t)((rawCsd[1] & 0x4000) >> 14))
     {
-        csd->flags |= SD_CSD_ERASE_BLOCK_ENABLED;
+        csd->flags |= kSD_CsdEraseBlockEnabled;
     }
 
     csd->sectorSize = (uint8_t)((rawCsd[1] & 0x3F80) >> 7);
     csd->wpGrpSize = (uint8_t)(rawCsd[1] & 0x7F);
     if ((uint8_t)(rawCsd[0] & 0x80000000U))
     {
-        csd->flags |= SD_CSD_WP_GRP_ENABLED;
+        csd->flags |= kSD_CsdWPGroupEnabled;
     }
     csd->r2wFactor = (uint8_t)((rawCsd[0] & 0x1C000000) >> 26);
     csd->writeBlkLen = (uint8_t)((rawCsd[0] & 0x3C00000) >> 22);
     if ((uint8_t)((rawCsd[0] & 0x200000) >> 21))
     {
-        csd->flags |= SD_CSD_WRITE_BL_PARTIAL;
+        csd->flags |= kSD_CsdWriteBlockPartial;
     }
     if ((uint8_t)((rawCsd[0] & 0x8000) >> 15))
     {
-        csd->flags |= SD_CSD_FILE_FORMAT_GROUP;
+        csd->flags |= kSD_CsdFileFormatGroup;
     }
     if ((uint8_t)((rawCsd[0] & 0x4000) >> 14))
     {
-        csd->flags |= SD_CSD_COPY;
+        csd->flags |= kSD_CsdCopy;
     }
     if ((uint8_t)((rawCsd[0] & 0x2000) >> 13))
     {
-        csd->flags |= SD_CSD_PERM_WRITE_PROTECT;
+        csd->flags |= kSD_CsdPermWriteProtect;
     }
     if ((uint8_t)((rawCsd[0] & 0x1000) >> 12))
     {
-        csd->flags |= SD_CSD_TMP_WRITE_PROTECT;
+        csd->flags |= kSD_CsdTmpWriteProtect;
     }
     csd->fileFormat = (uint8_t)((rawCsd[0] & 0xC00) >> 10);
 }
@@ -366,13 +366,13 @@ static void SD_DecodeScr(uint32_t *rawScr, sd_card_t *card)
     scr->sdSpec = (uint8_t)((rawScr[0] & 0xF000000) >> 24);
     if ((uint8_t)((rawScr[0] & 0x800000) >> 23))
     {
-        scr->flags |= SD_SCR_DATA_STAT_AFTER_ERASE;
+        scr->flags |= kSD_ScrDataStatAfterErase;
     }
     scr->sdSecurity = (uint8_t)((rawScr[0] & 0x700000) >> 20);
     scr->sdBusWidths = (uint8_t)((rawScr[0] & 0xF0000) >> 16);
     if ((uint8_t)((rawScr[0] & 0x8000) >> 15))
     {
-        scr->flags |= SD_SCR_SD_SPEC3;
+        scr->flags |= kSD_ScrSdSpec3;
     }
     scr->exSecurity = (uint8_t)((rawScr[0] & 0x7800) >> 10);
     scr->cmdSupport = (uint8_t)(rawScr[0] & 0x3);
@@ -381,24 +381,24 @@ static void SD_DecodeScr(uint32_t *rawScr, sd_card_t *card)
     switch(scr->sdSpec)
     {
         case 0:
-            card->version = SD_SPEC_VERSION_1_0;
+            card->version = kSD_SpecVersion1_0;
             break;
         case 1:
-            card->version = SD_SPEC_VERSION_1_1;
+            card->version = kSD_SpecVersion1_1;
             break;
         case 2:
-            card->version = SD_SPEC_VERSION_2_0;
-            if (card->scr.flags & SD_SCR_SD_SPEC3)
+            card->version = kSD_SpecVersion2_0;
+            if (card->scr.flags & kSD_ScrSdSpec3)
             {
-                card->version = SD_SPEC_VERSION_3_0;
+                card->version = kSD_SpecVersion3_0;
             }
             break;
         default:
             break;
     }
-    if (card->scr.sdBusWidths & SD_SCR_BUS_WIDTHS_4BIT)
+    if (card->scr.sdBusWidths & kSD_BusWidth4Bit)
     {
-        card->caps |= SD_CAPS_BUS_WIDTH_4BITS;
+        card->flags |= kSd_Support4BitWidth;
     }
 }
 
@@ -440,8 +440,14 @@ static status_t SD_SendScr(sd_card_t *card)
         return kStatus_Fail;
     }
 
-    rawScr[0] = swap_be32(rawScr[0]);
-    rawScr[1] = swap_be32(rawScr[1]);
+    /* Card date is read as big endian. */
+    if (kSDHC_EndianModeLittle == host->sdhcConfig->endianMode)
+    {
+        /* Converts byte sequence when system is little endian. */
+        rawScr[0] = SWAP_UINT32_IN_LITTLE_ENDIAN(rawScr[0]);
+        rawScr[1] = SWAP_UINT32_IN_LITTLE_ENDIAN(rawScr[1]);
+    }
+    
     memcpy(card->rawScr, rawScr, sizeof(card->rawScr));
 
     SD_DecodeScr(rawScr, card);    
@@ -459,7 +465,7 @@ static status_t SD_SwitchHighspeed(sd_card_t *card)
     uint32_t response[16] = {0};
     assert(card);
 
-    if ((card->version < SD_SPEC_VERSION_1_0) || (!(card->csd.ccc & SD_CCC_SWITCH)))
+    if ((card->version < kSD_SpecVersion1_0) || (!(card->csd.ccc & kSDMMC_CmdClassSwitch)))
     {
         return kStatus_SDMMC_CardNotSupport;
     }
@@ -469,7 +475,14 @@ static status_t SD_SwitchHighspeed(sd_card_t *card)
         return kStatus_SDMMC_SwitchFailed;
     }
 
-    if ((!(swap_be32(response[3]) & 0x10000)) || ((swap_be32(response[4]) & 0x0f000000) == 0x0F000000))
+    if (kSDHC_EndianModeLittle == host->sdhcConfig->endianMode)
+    {
+        /* Converts byte sequence when system is little endian. */
+        response[3] = SWAP_UINT32_IN_LITTLE_ENDIAN(response[3]);
+        response[4] = SWAP_UINT32_IN_LITTLE_ENDIAN(response[4]);
+    }
+
+    if ((!(response[3] & 0x10000)) || ((response[4] & 0x0f000000) == 0x0F000000))
     {
         return kStatus_SDMMC_CardNotSupport;
     }
@@ -479,9 +492,10 @@ static status_t SD_SwitchHighspeed(sd_card_t *card)
         return kStatus_SDMMC_SwitchFailed;
     }
 
-    if ((swap_be32(response[4]) & 0x0f000000) != 0x01000000)
+    /* If swich function group failed, function group will be returned. */
+    if ((response[4] & 0x0f000000) != 0x01000000) 
     {
-        return kStatus_SDMMC_CardNotSupport;
+        return kStatus_Fail;
     }
 
     return kStatus_Success;
@@ -508,7 +522,17 @@ static uint32_t SD_SetBusWidth(sd_card_t *card, sd_bus_width_t busWidth)
 
     command.index = kSD_AppSetBusWdith;
     command.responseType = kSDHC_ReponseTypeR1;
-    command.argument = busWidth;
+    switch (busWidth)
+    {
+        case kSD_BusWidth1Bit:
+            command.argument = 0U;
+            break;
+        case kSD_BusWidth4Bit:
+            command.argument = 2U;
+            break;
+        default:
+            return kStatus_InvalidArgument; 
+    }
 
     host->currentCmd = &command;
     host->currentData = 0;
@@ -644,7 +668,7 @@ static status_t SD_InitCard(sd_card_t *card)
         err = SD_SwitchHighspeed(card);
         if ((err != kStatus_Success) && (kStatus_SDMMC_CardNotSupport != err))
         {
-            return kStatus_SDMMC_SwitchFailed;
+            return kStatus_SDMMC_SwitchHighSpeedFailed;
         }
         else if (err == kStatus_Success)
         { 
@@ -704,11 +728,11 @@ static status_t SD_AppSendOpCond(sd_card_t *card, uint32_t acmd41Arg)
             return kStatus_SDMMC_SendCommandFailed;
         }
 
-        if (command->response[0] & SDMMC_CARD_BUSY)
+        if (command->response[0] & kSD_OcrPowerUpBusy)
         {
-            if (command->response[0] & SD_OCR_CCS)
+            if (command->response[0] & kSD_OcrCCS)
             {
-                card->caps |= SD_CAPS_HIGH_CAPACITY;
+                card->flags |= kSd_HighCapacity;
             }
             err = kStatus_Success;
             card->ocr = command->response[0];
@@ -777,7 +801,7 @@ static status_t SD_Read(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, u
 
     host = card->host;
 
-    if ((IS_SD_HIGH_CAPACITY(card) && (blockSize != 512)) || (blockSize > card->blockSize)
+    if (((card->flags & kSd_HighCapacity) && (blockSize != 512)) || (blockSize > card->blockSize)
          || (blockSize > host->capability->maxBlockLength) || (blockSize % 4))
     {
         return kStatus_SDMMC_CardNotSupport;
@@ -794,7 +818,7 @@ static status_t SD_Read(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, u
         command.index = kSDMMC_ReadSingleBlock;
     }
     command.argument = startBlock;
-    if (!IS_SD_HIGH_CAPACITY(card))
+    if (!(card->flags & kSd_HighCapacity))
     {
         command.argument *= data.blockSize;
     }
@@ -813,7 +837,7 @@ static status_t SD_Read(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, u
     {
         if (data.blockCount > 1)
         {
-            if (host->sdhcConfig.enableAutoCMD12)
+            if (host->sdhcConfig.enableAutoCmd12)
             {
                 if (kStatus_Success != SD_StopTransmission(card))
                 { 
@@ -847,7 +871,7 @@ static status_t SD_Write(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, 
 
     host = card->host;
 
-    if ((IS_SD_HIGH_CAPACITY(card) && (blockSize != 512)) || (blockSize > card->blockSize)
+    if (((card->flags & kSd_HighCapacity) && (blockSize != 512)) || (blockSize > card->blockSize)
          || (blockSize > host->capability->maxBlockLength) || (blockSize % 4))
     {
         return kStatus_SDMMC_CardNotSupport;
@@ -863,7 +887,7 @@ static status_t SD_Write(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, 
         command.index = kSDMMC_WriteBlock;
     }
     command.argument = startBlock;
-    if (!IS_SD_HIGH_CAPACITY(card))
+    if (!(card->flags & kSd_HighCapacity))
     {
         command.argument *= data.blockSize;
     }
@@ -881,7 +905,7 @@ static status_t SD_Write(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, 
 
     if (data.blockCount > 1)
     {
-        if (host->sdhcConfig.enableAutoCMD12)
+        if (host->sdhcConfig.enableAutoCmd12)
         {
             if (kStatus_Success != SD_StopTransmission(card))
             {
@@ -911,7 +935,7 @@ static status_t SD_Erase(sd_card_t *card, uint32_t startBlock, uint32_t blockCou
 
     s = startBlock;
     e = s + blockCount - 1;
-    if (!IS_SD_HIGH_CAPACITY(card))
+    if (!(card->flags & kSd_HighCapacity))
     {
         s = s * FSL_CARD_DEFAULT_BLOCK_SIZE;
         e = e * FSL_CARD_DEFAULT_BLOCK_SIZE;
@@ -976,13 +1000,13 @@ static void SDMMC_DecodeScr(uint32_t *rawScr, sd_card_t *card)
     scr->sdSpec = (uint8_t)((rawScr[0] & 0xF000000) >> 24);
     if ((uint8_t)((rawScr[0] & 0x800000) >> 23))
     {
-        scr->flags |= SD_SCR_DATA_STAT_AFTER_ERASE;
+        scr->flags |= kSD_ScrDataStatAfterErase;
     }
     scr->sdSecurity = (uint8_t)((rawScr[0] & 0x700000) >> 20);
     scr->sdBusWidths = (uint8_t)((rawScr[0] & 0xF0000) >> 16);
     if ((uint8_t)((rawScr[0] & 0x8000) >> 15))
     {
-        scr->flags |= SD_SCR_SD_SPEC3;
+        scr->flags |= kSD_ScrSdSpec3;
     }
     scr->exSecurity = (uint8_t)((rawScr[0] & 0x7800) >> 10);
     scr->cmdSupport = (uint8_t)(rawScr[0] & 0x3);
@@ -991,24 +1015,24 @@ static void SDMMC_DecodeScr(uint32_t *rawScr, sd_card_t *card)
     switch(scr->sdSpec)
     {
         case 0:
-            card->version = SD_SPEC_VERSION_1_0;
+            card->version = kSD_SpecVersion1_0;
             break;
         case 1:
-            card->version = SD_SPEC_VERSION_1_1;
+            card->version = kSD_SpecVersion1_1;
             break;
         case 2:
-            card->version = SD_SPEC_VERSION_2_0;
-            if (card->scr.flags & SD_SCR_SD_SPEC3)
+            card->version = kSD_SpecVersion2_0;
+            if (card->scr.flags & kSD_ScrSdSpec3)
             {
-                card->version = SD_SPEC_VERSION_3_0;
+                card->version = kSD_SpecVersion3_0;
             }
             break;
         default:
             break;
     }
-    if (card->scr.sdBusWidths & SD_SCR_BUS_WIDTHS_4BIT)
+    if (card->scr.sdBusWidths & kSD_BusWidth4Bit)
     {
-        card->caps |= SD_CAPS_BUS_WIDTH_4BITS;
+        card->flags |= kSd_Support4BitWidth;
     }
 }
 
@@ -1043,19 +1067,19 @@ status_t SD_Init(sd_card_t *card)
 
     if ((host->capability->supportMask) & SDHC_SUPPORT_V330)
     {
-        acmd41Arg |= SD_OCR_VDD_32_33 | SD_OCR_VDD_33_34;
+        acmd41Arg |= kSD_OcrVdd32_33 | kSD_OcrVdd33_34;
     }
 #if defined FSL_FEATURE_SDHC_HAS_V300_SUPPORT && FSL_FEATURE_SDHC_HAS_V300_SUPPORT
     if ((host->capability->supportMask) & SDHC_SUPPORT_V300)
     {
-        acmd41Arg |= SD_OCR_VDD_29_30;
+        acmd41Arg |= kSD_OcrVdd29_30;
     }
 #endif
     if (kStatus_Success == SD_SendIfCond(card))
     {
         /* SDHC or SDXC card */
-        acmd41Arg |= SD_OCR_HCS;
-        card->caps |= SD_CAPS_SDHC;
+        acmd41Arg |= kSD_OcrHCS;
+        card->flags |= kSd_IsSDHC;
     }
     else
     {
@@ -1101,7 +1125,7 @@ status_t SD_ReadBlocks(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, ui
 
     if ((blockCount + startBlock) > card->blockCount)
     {
-        return kStatus_SDMMC_InvalidIORange;
+        return kStatus_InvalidArgument;
     }
 
     while(blkLeft)
@@ -1150,7 +1174,7 @@ status_t SD_WriteBlocks(sd_card_t *card, uint8_t *buffer, uint32_t startBlock, u
 
     if ((blockCount + startBlock) > card->blockCount)
     {
-        return kStatus_SDMMC_InvalidIORange;
+        return kStatus_InvalidArgument;
     }
 
     while(blkLeft)

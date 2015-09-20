@@ -1,6 +1,7 @@
 
 
 #include "ksdk_common.h"
+#include "core_cmInstr.h"
 
 void SDMMC_DelayTimeMsec(uint32_t msec);
 
@@ -12,3 +13,6 @@ status_t SDMMC_GoIdle(sdhc_host_t *host);
 status_t SDMMC_StopTransmission(sdhc_host_t *host);
 status_t SDMMC_SetBlockSize(sdhc_host_t *host, uint32_t blockSize);
 status_t SDMMC_SetSdBusFreq(sdhc_host_t *host, uint32_t busFreq);
+
+/* Converts byte sequence when system is little endian. */
+#define SWAP_UINT32_IN_LITTLE_ENDIAN(x) (__REV(x))
