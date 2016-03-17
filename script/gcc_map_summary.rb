@@ -201,6 +201,8 @@ class GccMap
 
     #Get gcc map symbol information.
     def get_symbol(file_handle, line)
+      gcc_map_symbol = !nil
+
       #Get section type of the line's symbol
       section_type = get_section_type(line)
 
@@ -221,47 +223,57 @@ class GccMap
           line = symbol_attributes.to_s
           # puts symbol_attributes.to_s
         else
-          return nil
+          gcc_map_symbol = nil
         end
       when SECTION_STACK .. SECTION_HEAP
         symbol_attributes = line.split(" ")
         # puts symbol_attributes.to_s
       else
         # puts "unknown section type!"
-        return nil
+        gcc_map_symbol = nil
       end
 
-      #Get symbol name.
-      #Split section name and symbol name from the first array element.
-      first_element = symbol_attributes[0]
-      if (nil != first_element.index(".", 1))
-        symbol_name_pos = (first_element.index(".", 1) + 1)
-        symbol_name = first_element[symbol_name_pos, first_element.length]
-      else
-        symbol_name = ""
-      end
+      #Generate the symbol object.
+      if (nil != gcc_map_symbol)
+        #Get symbol name.
+        #Split section name and symbol name from the first array element.
+        first_element = symbol_attributes[0]
+        if (nil != first_element.index(".", 1))
+          symbol_name_pos = (first_element.index(".", 1) + 1)
+          symbol_name = first_element[symbol_name_pos, first_element.length]
+        else
+          #The sections(.isr_vector, .flash_config, .stack, .heap) have no symbol. So set its symbol name as "Total".
+          #Still keep the name of the symbols whose name is null in other sections as null.
+          if ((SECTION_ISR_VECTOR .. SECTION_HEAP) === section_type)
+            symbol_name = "Total"
+          else
+            symbol_name = ""
+          end
+        end
 
-      #Get start address, size and module name.
-      start_address = symbol_attributes[1].to_i(16)
-      size = symbol_attributes[2].to_i(16)
-      #Module name is null for stack and heap symbol
-      if (3 == symbol_attributes.size)
-        module_name = "no_name"
-      else
-        module_name = symbol_attributes[3]
+        #Get start address, size and module name.
+        start_address = symbol_attributes[1].to_i(16)
+        size = symbol_attributes[2].to_i(16)
+        #Module name is null for stack and heap symbol
+        if (3 == symbol_attributes.size)
+          module_name = ""
+        else
+          module_name = symbol_attributes[3]
+        end
+        #Don't summary the symbol in the /lib/gcc/ directory
+        #Don't summary the symbol when the start address = 0 except for ISR Vector section.
+        if (!(module_name=~/\/lib\//) && ((0 != start_address) && (section_type != SECTION_ISR_VECTOR)) || (section_type == SECTION_ISR_VECTOR))
+          #Construct the symbol object.
+          # puts section_type.to_s
+          # puts symbol_name
+          # puts start_address.to_s(16)
+          # puts size.to_s(16)
+          # puts module_name
+          gcc_map_symbol = GccMapSymbol.new(section_type, symbol_name, start_address, size, module_name)
+        else
+          gcc_map_symbol = nil
+        end
       end
-      #Don't summry the symbol in the /lib/gcc/ directory
-      if (module_name=~/\/lib\//)
-        return nil
-      end
-
-      #Construct the symbol object.
-      # puts section_type.to_s
-      # puts symbol_name
-      # puts start_address.to_s(16)
-      # puts size.to_s(16)
-      # puts module_name
-      gcc_map_symbol = GccMapSymbol.new(section_type, symbol_name, start_address, size, module_name)
 
       return gcc_map_symbol
     end
@@ -292,8 +304,8 @@ class GccMap
         gcc_map_module.add_ro_code_size(size)
       when SECTION_RO_DATA
         gcc_map_module.add_ro_data_size(size)
-      when SECTION_RW_DATA
-        gcc_map_module.add_ro_data_size(size)
+      when SECTION_RW_DATA, SECTION_ZI_DATA
+        gcc_map_module.add_rw_data_size(size)
       else
       end
     end
@@ -309,39 +321,65 @@ class GccMap
       section_names = (section_names << ".data" << ".bss" << ".rodata" << ".text" << ".isr_vector" << ".flash_config" << ".stack" << ".heap")
       begin
         #Create a new file based on the original file name to save the summary result.
-        result_file_name = (@file_name[0, @file_name.rindex(".")] + ".txt")
-        puts result_file_name
-        File.open(result_file_name, "w") do |file_handle|
-          file_handle.printf("%20s, %40s, %20s, %20s, %40s\r\n", "section type", "symbol name", "start_address", "size", "module_name")
+        result_file_name = (@file_name[0, @file_name.rindex(".")] + "_section.txt")
+        puts ("section summary result can be seen from:" + result_file_name)
 
+        #Write the summary information to the file.
+        File.open(result_file_name, "w") do |file_handle|
+          file_handle.printf("%-20s| %-50s| %20s| %20s| %-50s\r\n", "section type", "symbol name", "start_address", "size", "module_name")
+          file_handle.printf("_________________________________________________________________________________________________________________________________________________________________\r\n")
           @section_array.each { |section|
             #Avoid to print two times for .isr_vector, .flash_config, .stack, .heap.
             if ((SECTION_RW_DATA .. SECTION_RO_CODE) === section.get_type)
-              file_handle.printf("%20s, %40s, %12s%08x, %20s, %40s\r\n", section_names[section.get_type - 1], "",
+              file_handle.printf("%-20s| %-50s| %12s%08x| %20s| %-50s\r\n", section_names[section.get_type - 1], "Total",
                                  "0x", (section.get_start_address), ("0x" + section.get_size.to_s(16)), "")
             end
 
             symbol_list = section.get_symbol_list
             symbol_list.each { |symbol|
-              file_handle.printf("%20s, %40s, %12s%08x, %20s, %40s\r\n", section_names[symbol.get_section_type - 1], symbol.get_name,
+              file_handle.printf("%-20s| %-50s| %12s%08x| %20s| %-50s\r\n", section_names[symbol.get_section_type - 1], symbol.get_name,
                                  "0x", (symbol.get_start_address), ("0x" + symbol.get_size.to_s(16)), symbol.get_module_name)
             }
 
-            file_handle.printf(" \r\n \r\n \r\n")
+            file_handle.printf("%-20s| %-50s| %20s| %20s| %-50s\r\n", "", "", "", "", "")
+            file_handle.printf("%-20s| %-50s| %20s| %20s| %-50s\r\n", "", "", "", "", "")
           }
         end
       rescue Exception => e
-        puts("Create result data file error!")
+        puts("Create section summary data file error!")
       end
 
     end
 
     def print_module_summary
-      @module_hash.each_value { |gcc_map_module|
-        puts ("module name:" + gcc_map_module.get_name + "           ro code size:" + gcc_map_module.get_ro_code_size.to_s(16) +
-              "             ro data size:" + gcc_map_module.get_ro_data_size.to_s(16) + "           rw data size:" + gcc_map_module.get_rw_data_size.to_s(16))
-        # printf("module name:%40s\r\n,            ro code size:", gcc_map_module.get_name, )
-      }
+      begin
+        #Create a new file based on the original file name to save the summary result.
+        result_file_name = (@file_name[0, @file_name.rindex(".")] + "_module.txt")
+        puts ("module summary result can be seen from:" + result_file_name)
+
+        #Write the summary information to the file.
+        total_ro_code_size = 0
+        total_ro_data_size = 0
+        total_rw_data_size = 0
+        File.open(result_file_name, "w") do |file_handle|
+          file_handle.printf("%-50s| %20s| %20s| %20s\r\n", "module name", "ro code size", "ro data size", "rw data size")
+          file_handle.printf("______________________________________________________________________________________________________________________________________________________________\r\n")
+          @module_hash.each_value { |gcc_map_module|
+            file_handle.printf("%-50s| %20s| %20s| %20s\r\n", gcc_map_module.get_name, gcc_map_module.get_ro_code_size.to_s(10),
+                               gcc_map_module.get_ro_data_size.to_s(10), gcc_map_module.get_rw_data_size.to_s(10))
+
+            #Get the total size.
+            total_ro_code_size += gcc_map_module.get_ro_code_size
+            total_ro_data_size += gcc_map_module.get_ro_data_size
+            total_rw_data_size += gcc_map_module.get_rw_data_size
+          }
+          #Write total size to the file.
+          file_handle.printf("______________________________________________________________________________________________________________________________________________________________\r\n")
+          file_handle.printf("%-50s| %20s| %20s| %20s\r\n", "Total:", total_ro_code_size, total_ro_data_size, total_rw_data_size)
+        end
+      rescue Exception => e
+        puts("Create module summary data file error!")
+      end
     end
   end
 
@@ -350,4 +388,4 @@ class GccMap
   # gcc_map = GccMap.new(ARGV[0])
   gcc_map.summarize_symbol
   gcc_map.print_region_summary
-  # gcc_map.print_module_summary
+  gcc_map.print_module_summary
