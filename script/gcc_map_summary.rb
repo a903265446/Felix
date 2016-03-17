@@ -1,4 +1,3 @@
-#!/usr/bin/ruby
 # -*- coding: UTF-8 -*-
 
 #Define the section type
@@ -26,43 +25,64 @@ class GccMapSymbol
     @module_name = module_name
   end
 
-  def get_section_type()
+  def get_section_type
     return @section_type
   end
 
-  def get_name()
+  def get_name
     return @name
   end
 
-  def get_start_address()
+  def get_start_address
     return @start_address
   end
 
-  def get_size()
+  def get_size
     return @size
   end
 
-  def get_module_name()
+  def get_module_name
     return @module_name
   end
-
-
 end
 
 class GccMapSection
   @type#Int
+  @start_address
+  @size
   @symbol_list#Array, item of which is GccMapSymbol
   def initialize(section_type)
     @type = section_type
+    @start_address = 0
+    @size = 0
     @symbol_list = Array.new
   end
 
-  def get_symbol_list()
+  def get_symbol_list
     return @symbol_list
   end
 
   def add_symbol(gcc_map_symbol)
     @symbol_list = (@symbol_list << gcc_map_symbol)
+  end
+
+  def get_total_size
+    @start_address = @symbol_list[0].get_start_address
+    @symbol_list.each { |symbol|
+      @size += symbol.get_size
+    }
+  end
+
+  def get_type
+    return @type
+  end
+
+  def get_start_address
+    return @start_address
+  end
+
+  def get_size
+    return @size
   end
 end
 
@@ -78,19 +98,19 @@ class GccMapModule
     @rw_data_size = 0
   end
 
-  def get_name()
+  def get_name
     return @name
   end
 
-  def get_ro_code_size()
+  def get_ro_code_size
     return @ro_code_size
   end
 
-  def get_ro_data_size()
+  def get_ro_data_size
     return @ro_data_size
   end
 
-  def get_rw_data_size()
+  def get_rw_data_size
     return @rw_data_size
   end
 
@@ -125,7 +145,7 @@ class GccMap
   end
 
   #Get the map file line's section type and distribute the line to corresponding handling function.
-  def summarize_symbol()
+  def summarize_symbol
     #Get the line which has symbol information.
     begin
       File.open(@file_name, "r") do |file_handle|
@@ -133,11 +153,12 @@ class GccMap
             #Get gcc map symbol information.
             gcc_map_symbol = get_symbol(file_handle, line)
             if (nil != gcc_map_symbol)
-              # puts gcc_map_symbol.get_section_type().to_s(16)
+              # puts gcc_map_symbol.get_section_type.to_s(16)
               #Distribute the line content to corresponding section handling function.
               summary_symbol(gcc_map_symbol)
             end
           end
+          get_total_size
         end
       rescue Exception => e
         puts "Read file error!"
@@ -183,6 +204,7 @@ class GccMap
       #Get section type of the line's symbol
       section_type = get_section_type(line)
 
+      #Format the line content.
       case section_type
       when SECTION_RW_DATA .. SECTION_FLASH_CONFIG
         #Uniformly format the line content for the section except ".stack" and ".heap"
@@ -209,6 +231,7 @@ class GccMap
         return nil
       end
 
+      #Get symbol name.
       #Split section name and symbol name from the first array element.
       first_element = symbol_attributes[0]
       if (nil != first_element.index(".", 1))
@@ -218,20 +241,21 @@ class GccMap
         symbol_name = ""
       end
 
+      #Get start address, size and module name.
       start_address = symbol_attributes[1].to_i(16)
       size = symbol_attributes[2].to_i(16)
-      #module name is nil for stack and heap symbol
+      #Module name is null for stack and heap symbol
       if (3 == symbol_attributes.size)
         module_name = "no_name"
       else
         module_name = symbol_attributes[3]
       end
-
       #Don't summry the symbol in the /lib/gcc/ directory
       if (module_name=~/\/lib\//)
         return nil
-        puts "found lib gcc"
       end
+
+      #Construct the symbol object.
       # puts section_type.to_s
       # puts symbol_name
       # puts start_address.to_s(16)
@@ -245,23 +269,24 @@ class GccMap
     #Summary each kind of section's symbol information.
     def summary_symbol(gcc_map_symbol)
       #Add the symbol to symbol list array in the section it belongs to.
-      section_type = gcc_map_symbol.get_section_type()
+      section_type = gcc_map_symbol.get_section_type
       # puts section_type.to_s(16)
       #Section object is saved in the (section_type - 1) position in the array.
       @section_array[section_type - 1].add_symbol(gcc_map_symbol)
 
       #Add the symbol size related information to the module it belongs to.
-      module_name = gcc_map_symbol.get_module_name()
+      module_name = gcc_map_symbol.get_module_name
+      #Create key if the key doesn't exist.
       if (false == @module_hash.has_key?(module_name))
-        puts module_name
-        puts "no key"
+        # puts module_name
+        # puts "no key"
         gcc_map_module = GccMapModule.new(module_name)
         @module_hash[module_name] = gcc_map_module
       else
         gcc_map_module = @module_hash[module_name]
       end
 
-      size = gcc_map_symbol.get_size()
+      size = gcc_map_symbol.get_size
       case section_type
       when SECTION_RO_CODE
         gcc_map_module.add_ro_code_size(size)
@@ -273,28 +298,56 @@ class GccMap
       end
     end
 
-    def print_region_summary()
+    def get_total_size
       @section_array.each { |section|
-        puts "new section"
-        symbol_list = section.get_symbol_list()
-        symbol_list.each { |symbol|
-          puts ("symbol section type:" + symbol.get_section_type.to_s(16) + "          name:" + symbol.get_name() +
-            "          start_address:" + symbol.get_start_address().to_s(16) + "           size:" + symbol.get_size().to_s(16) +
-            "          module_name:" + symbol.get_module_name())
-         }
+        section.get_total_size
       }
     end
 
-    def print_module_summary()
+    def print_region_summary
+      section_names = Array.new
+      section_names = (section_names << ".data" << ".bss" << ".rodata" << ".text" << ".isr_vector" << ".flash_config" << ".stack" << ".heap")
+      begin
+        #Create a new file based on the original file name to save the summary result.
+        result_file_name = (@file_name[0, @file_name.rindex(".")] + ".txt")
+        puts result_file_name
+        File.open(result_file_name, "w") do |file_handle|
+          file_handle.printf("%20s, %40s, %20s, %20s, %40s\r\n", "section type", "symbol name", "start_address", "size", "module_name")
+
+          @section_array.each { |section|
+            #Avoid to print two times for .isr_vector, .flash_config, .stack, .heap.
+            if ((SECTION_RW_DATA .. SECTION_RO_CODE) === section.get_type)
+              file_handle.printf("%20s, %40s, %12s%08x, %20s, %40s\r\n", section_names[section.get_type - 1], "",
+                                 "0x", (section.get_start_address), ("0x" + section.get_size.to_s(16)), "")
+            end
+
+            symbol_list = section.get_symbol_list
+            symbol_list.each { |symbol|
+              file_handle.printf("%20s, %40s, %12s%08x, %20s, %40s\r\n", section_names[symbol.get_section_type - 1], symbol.get_name,
+                                 "0x", (symbol.get_start_address), ("0x" + symbol.get_size.to_s(16)), symbol.get_module_name)
+            }
+
+            file_handle.printf(" \r\n \r\n \r\n")
+          }
+        end
+      rescue Exception => e
+        puts("Create result data file error!")
+      end
+
+    end
+
+    def print_module_summary
       @module_hash.each_value { |gcc_map_module|
-        puts ("module name:" + gcc_map_module.get_name() + "           ro code size:" + gcc_map_module.get_ro_code_size.to_s(16) +
-          "             ro data size:" + gcc_map_module.get_ro_data_size().to_s(16) + "           rw data size:" + gcc_map_module.get_rw_data_size().to_s(16))
+        puts ("module name:" + gcc_map_module.get_name + "           ro code size:" + gcc_map_module.get_ro_code_size.to_s(16) +
+              "             ro data size:" + gcc_map_module.get_ro_data_size.to_s(16) + "           rw data size:" + gcc_map_module.get_rw_data_size.to_s(16))
+        # printf("module name:%40s\r\n,            ro code size:", gcc_map_module.get_name, )
       }
     end
   end
 
 
   gcc_map = GccMap.new("./adc16_polling_frdmk22f.map")
-  gcc_map.summarize_symbol()
-  gcc_map.print_region_summary()
-  gcc_map.print_module_summary()
+  # gcc_map = GccMap.new(ARGV[0])
+  gcc_map.summarize_symbol
+  gcc_map.print_region_summary
+  # gcc_map.print_module_summary
