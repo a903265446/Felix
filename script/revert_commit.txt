@@ -1,0 +1,2 @@
+git revert md5
+git push repo(push the revert operation)

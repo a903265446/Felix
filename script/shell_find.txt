@@ -1,0 +1,8 @@
+find . -name "*.sh" | xargs fromdos
+find . -name "*.sh" | xargs sed -i 's/\\/\//g'?
+
+
+find ./ -maxdepth 100 -a -type f | xargs grep -H "SDHC_DRV_Init"
+
+grep -r -n kDmaRequestMux0TSI *
+
