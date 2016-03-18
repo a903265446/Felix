@@ -404,7 +404,7 @@ class GccMap
       end
     end
 
-    def print_init_table
+    def print_init_table_summary
       begin
         #Create a new file based on the original file name to save the summary result.
         result_file_name = (@file_name[0, @file_name.rindex(".")] + "_init_table.txt")
