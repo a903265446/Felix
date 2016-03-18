@@ -129,6 +129,7 @@ class GccMapModule
   end
 end
 
+# class GccMapInitTable
 
 class GccMap
   @section_array
