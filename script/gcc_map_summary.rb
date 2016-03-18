@@ -129,12 +129,50 @@ class GccMapModule
   end
 end
 
-# class GccMapInitTable
+class GccMapInitTable
+  @zero_dest_range#Int
+  @zero_size#Int
+  @copy_source_range#Int
+  @copy_dest_range#Int
+  @copy_size#Int
+
+  def initialize(zero_dest_rang, zero_size, copy_source_range, copy_dest_range, copy_size)
+    @zero_dest_range = zero_dest_rang
+    @zero_size = zero_size
+    @copy_source_range = copy_source_range
+    @copy_dest_range = copy_dest_range
+    @copy_size = copy_size
+  end
+
+  def get_zero_dest_range
+    return @zero_dest_range
+  end
+
+  def get_zero_size
+    return @zero_size
+  end
+
+  def get_copy_source_range
+    return @copy_source_range
+  end
+
+  def get_copy_dest_range
+    return @copy_dest_range
+  end
+
+  def get_copy_size
+    return @copy_size
+  end
+end
 
 class GccMap
   @section_array
   @module_hash
+  @init_table
   @file_name
+
+  @last_symbol_section_type#Int
+  @init_copy_source_range#Int
 
   def initialize(file_name)
     @section_array = Array.new
@@ -143,13 +181,15 @@ class GccMap
       gcc_map_section = GccMapSection.new(section_type)
       @section_array = (@section_array << gcc_map_section)
     end
-
     #Create an additional item to store rodata symbol and code symbol together.
     gcc_map_section = GccMapSection.new(SECTION_RO_DATA_CODE)
     @section_array = (@section_array << gcc_map_section)
 
     @module_hash = Hash.new
+    @init_table = nil
     @file_name = file_name
+    @last_symbol_section_type = SECTION_NONE
+    @init_copy_source_range = 0
   end
 
   #Get the map file line's section type and distribute the line to corresponding handling function.
@@ -167,6 +207,7 @@ class GccMap
             end
           end
           get_total_size
+          get_init_table
         end
       rescue Exception => e
         puts "Read file error!"
@@ -178,13 +219,18 @@ class GccMap
       #Get the section type from the line's symbol by checking if the beginning content of the line is ".data",
       #".bss", ".text", ".rodata", ".isr_vector", ".FlashConfig", ".stack", ".heap" and if the line doesn't
       #contain "load address"
-      if((1 == (line=~/\.data/)) && (!(line=~/load address/)))
+      section_type = SECTION_NONE
+      if(((1 == (line=~/\.data/)) || (1 == (line=~/\.jcr/)) || ((SECTION_RW_DATA == @last_symbol_section_type) && (line=~/\*fill\*/))) && (!(line=~/load address/)))
         section_type = SECTION_RW_DATA
-      elsif((1 == (line=~/\.bss/)) && (!(line=~/load address/)))
+      elsif((0 == (line=~/\.data/)) && (line=~/load address/))
+        #Get the flash load address value.
+        tmp_array = line.split(" ")
+        @init_copy_source_range = tmp_array[4].to_i(16)
+      elsif(((1 == (line=~/\.bss/)) || ((SECTION_ZI_DATA == @last_symbol_section_type) && (line=~/\*fill\*/))) && (!(line=~/load address/)))
         section_type = SECTION_ZI_DATA
-      elsif(1 == (line=~/\.rodata/))
+      elsif((1 == (line=~/\.rodata/)) || ((SECTION_RW_DATA == @last_symbol_section_type) && (line=~/\*fill\*/)))
         section_type = SECTION_RO_DATA
-      elsif(1 == (line=~/\.text/))
+      elsif((1 == (line=~/\.text/)) || ((SECTION_RW_DATA == @last_symbol_section_type) && (line=~/\*fill\*/)))
         section_type = SECTION_RO_CODE
       elsif(1 == (line=~/\.isr_vector/))
         section_type = SECTION_ISR_VECTOR
@@ -195,8 +241,8 @@ class GccMap
       elsif(0 == (line=~/\.heap/))
         section_type = SECTION_HEAP
       else
-        section_type = SECTION_NONE
       end
+      @last_symbol_section_type = section_type if SECTION_NONE != section_type
 
       return section_type
     end
@@ -234,8 +280,12 @@ class GccMap
         else
           module_name = symbol_attributes[3]
         end
+        #Uniformly set the module name to be "gcc_lib.o" when the symbol is in the gcc library directory.
+        module_name = "gcc_lib.o" if (module_name=~/\/lib\//)
+
         #Don't summary the symbols in the /lib/gcc/ directory, size is 0, start address is 0 except for ISR Vector section.
-        if ((0 != size) && !(module_name=~/\/lib\//) && ((0 != start_address) && (SECTION_ISR_VECTOR != section_type)) || (SECTION_ISR_VECTOR == section_type))
+        # if ((0 != size) && !(module_name=~/\/lib\//) && ((0 != start_address) && (SECTION_ISR_VECTOR != section_type)) || (SECTION_ISR_VECTOR == section_type))
+        if ((0 != size) && ((0 != start_address) && (SECTION_ISR_VECTOR != section_type)) || (SECTION_ISR_VECTOR == section_type))
           gcc_map_symbol = GccMapSymbol.new(section_type, symbol_name, start_address, size, module_name)
         else
           gcc_map_symbol = nil
@@ -283,6 +333,12 @@ class GccMap
       }
     end
 
+    def get_init_table
+      section_zi = @section_array[SECTION_ZI_DATA - 1]
+      section_rw = @section_array[SECTION_RW_DATA - 1]
+      @init_table = GccMapInitTable.new(section_zi.get_start_address, section_zi.get_size, @init_copy_source_range, section_rw.get_start_address, section_rw.get_size)
+    end
+
     SECTION_RO_DATA_CODE = 9
     def print_region_summary
       section_names = Array.new
@@ -296,9 +352,9 @@ class GccMap
         File.open(result_file_name, "w") do |file_handle|
           file_handle.printf("%-20s| %-50s| %20s| %20s| %-50s\r\n", "section type", "symbol name", "start_address", "size", "module_name")
           file_handle.printf("_________________________________________________________________________________________________________________________________________________________________\r\n")
-          (@section_array[(SECTION_ISR_VECTOR - 1)..(SECTION_ZI_DATA - 1)] + [@section_array[SECTION_RO_DATA_CODE - 1]] + @section_array[(SECTION_HEAP - 1)..(SECTION_STACK - 1)]).each { |section|
+          (@section_array[(SECTION_ISR_VECTOR - 1) .. (SECTION_ZI_DATA - 1)] + [@section_array[SECTION_RO_DATA_CODE - 1]] + @section_array[(SECTION_HEAP - 1)..(SECTION_STACK - 1)]).each { |section|
             #Avoid to print two times for .isr_vector, .FlashConfig, .stack, .heap.
-            if ([SECTION_RW_DATA .. SECTION_ZI_DATA, SECTION_RO_DATA_CODE].include?(section.get_type))
+            if ([SECTION_RW_DATA, SECTION_ZI_DATA, SECTION_RO_DATA_CODE].include?(section.get_type))
               file_handle.printf("%-20s| %-50s| %12s%08x| %20s| %-50s\r\n", section_names[section.get_type - 1], "Total",
                                  "0x", (section.get_start_address), ("0x" + section.get_size.to_s(16)), "")
             end
@@ -309,14 +365,12 @@ class GccMap
                                  "0x", (symbol.get_start_address), ("0x" + symbol.get_size.to_s(16)), symbol.get_module_name)
             }
 
-            file_handle.printf("%-20s| %-50s| %20s| %20s| %-50s\r\n", "", "", "", "", "")
-            file_handle.printf("%-20s| %-50s| %20s| %20s| %-50s\r\n", "", "", "", "", "")
+            file_handle.printf("\r\n\r\n")
           }
         end
       rescue Exception => e
         puts("Create section summary data file error!")
       end
-
     end
 
     def print_module_summary
@@ -349,14 +403,35 @@ class GccMap
         puts("Create module summary data file error!")
       end
     end
+
+    def print_init_table
+      begin
+        #Create a new file based on the original file name to save the summary result.
+        result_file_name = (@file_name[0, @file_name.rindex(".")] + "_init_table.txt")
+        puts ("init table summary result can be seen from:" + result_file_name)
+
+        #Write the summary information to the file.
+        File.open(result_file_name, "w") do |file_handle|
+          file_handle.printf("Init table information is:\r\n\r\n\r\n")
+          file_handle.printf("%-30s| %30s| %30s| %30s\r\n", "type", "source address", "destination address", "total size")
+          file_handle.printf("______________________________________________________________________________________________________________________________________________________________\r\n")
+          file_handle.printf("%-30s| %30s| %22s%08x| %30s\r\n", "Zero Init", "", "0x", @init_table.get_zero_dest_range,
+            ("0x" + @init_table.get_zero_size.to_s(16)))
+          file_handle.printf("%-30s| %22s%08x| %22s%08x| %30s\r\n", "Copy Init", "0x", @init_table.get_copy_source_range, "0x",
+            @init_table.get_copy_dest_range, ("0x" + @init_table.get_copy_size.to_s(16)))
+        end
+
+      rescue Exception => e
+        puts("Create init_table summary data file error!")
+      end
+    end
   end
 
   def print_help
-    prompt_string = "Please input the script parameters as this format:'ruby gcc_map_summary.rb ./file_name.map'"
+    prompt_string = "Please input the script parameters as this format: \"ruby gcc_map_summary.rb ./file_name.map\""
     if (0 == ARGV.length)
       puts prompt_string
     elsif ((nil != ARGV[0].rindex(".")) && ((ARGV[0][ARGV[0].rindex("."), ARGV[0].length]) == ".map"))#Check if the suffix of the script parameter is ".map"
-      # gcc_map = GccMap.new("./adc16_polling_frdmk22f.map")
       gcc_map = GccMap.new(ARGV[0])
       gcc_map.summarize_symbol
       gcc_map.print_region_summary
@@ -366,5 +441,13 @@ class GccMap
     end
   end
 
+  def self_test(file_name)
+    gcc_map = GccMap.new(file_name)
+    gcc_map.summarize_symbol
+    gcc_map.print_region_summary
+    gcc_map.print_module_summary
+    gcc_map.print_init_table
+  end
 
+  # self_test("./adc16_polling_frdmk22f.map")
   print_help
