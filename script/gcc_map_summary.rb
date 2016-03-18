@@ -11,6 +11,8 @@ SECTION_RO_CODE = 6
 SECTION_HEAP = 7
 SECTION_STACK = 8
 
+SECTION_RO_DATA_CODE = 9
+
 class GccMapSymbol
   @section_type#Int
   @name#String
@@ -140,6 +142,11 @@ class GccMap
       gcc_map_section = GccMapSection.new(section_type)
       @section_array = (@section_array << gcc_map_section)
     end
+
+    #Create an additional item to store rodata symbol and code symbol together.
+    gcc_map_section = GccMapSection.new(SECTION_RO_DATA_CODE)
+    @section_array = (@section_array << gcc_map_section)
+
     @module_hash = Hash.new
     @file_name = file_name
   end
@@ -243,22 +250,20 @@ class GccMap
     def summary_symbol(gcc_map_symbol)
       #Add the symbol to symbol list array in the section it belongs to.
       section_type = gcc_map_symbol.get_section_type
-      # puts section_type.to_s(16)
       #Section object is saved in the (section_type - 1) position in the array.
       @section_array[section_type - 1].add_symbol(gcc_map_symbol)
+      #Add ro_data and .text symbol together to one additional section.
+      @section_array[SECTION_RO_DATA_CODE - 1].add_symbol(gcc_map_symbol) if ((SECTION_RO_DATA == section_type) || (SECTION_RO_CODE == section_type))
 
       #Add the symbol size related information to the module it belongs to.
       module_name = gcc_map_symbol.get_module_name
       #Create key if the key doesn't exist.
       if (false == @module_hash.has_key?(module_name))
-        # puts module_name
-        # puts "no key"
         gcc_map_module = GccMapModule.new(module_name)
         @module_hash[module_name] = gcc_map_module
       else
         gcc_map_module = @module_hash[module_name]
       end
-
       size = gcc_map_symbol.get_size
       case section_type
       when SECTION_RO_CODE
@@ -277,9 +282,10 @@ class GccMap
       }
     end
 
+    SECTION_RO_DATA_CODE = 9
     def print_region_summary
       section_names = Array.new
-      section_names = (section_names << ".isr_vector" << ".flash_config" << ".data" << ".bss" << ".rodata" << ".text" << ".heap" << ".stack")
+      section_names = (section_names << ".isr_vector" << ".flash_config" << ".data" << ".bss" << ".rodata" << ".text" << ".heap" << ".stack" << ".rodata + .text")
       begin
         #Create a new file based on the original file name to save the summary result.
         result_file_name = (@file_name[0, @file_name.rindex(".")] + "_section.txt")
@@ -289,9 +295,9 @@ class GccMap
         File.open(result_file_name, "w") do |file_handle|
           file_handle.printf("%-20s| %-50s| %20s| %20s| %-50s\r\n", "section type", "symbol name", "start_address", "size", "module_name")
           file_handle.printf("_________________________________________________________________________________________________________________________________________________________________\r\n")
-          @section_array.each { |section|
+          (@section_array[(SECTION_ISR_VECTOR - 1)..(SECTION_ZI_DATA - 1)] + [@section_array[SECTION_RO_DATA_CODE - 1]] + @section_array[(SECTION_HEAP - 1)..(SECTION_STACK - 1)]).each { |section|
             #Avoid to print two times for .isr_vector, .FlashConfig, .stack, .heap.
-            if ((SECTION_RW_DATA .. SECTION_RO_CODE) === section.get_type)
+            if ([SECTION_RW_DATA .. SECTION_ZI_DATA, SECTION_RO_DATA_CODE].include?(section.get_type))
               file_handle.printf("%-20s| %-50s| %12s%08x| %20s| %-50s\r\n", section_names[section.get_type - 1], "Total",
                                  "0x", (section.get_start_address), ("0x" + section.get_size.to_s(16)), "")
             end
@@ -344,9 +350,20 @@ class GccMap
     end
   end
 
+  def print_help
+    prompt_string = "Please input the script parameters as this format:'ruby gcc_map_summary.rb ./file_name.map'"
+    if (0 == ARGV.length)
+      puts prompt_string
+    elsif ((nil != ARGV[0].rindex(".")) && ((ARGV[0][ARGV[0].rindex("."), ARGV[0].length]) == ".map"))#Check if the suffix of the script parameter is ".map"
+      # gcc_map = GccMap.new("./adc16_polling_frdmk22f.map")
+      gcc_map = GccMap.new(ARGV[0])
+      gcc_map.summarize_symbol
+      gcc_map.print_region_summary
+      gcc_map.print_module_summary
+    else
+      puts prompt_string
+    end
+  end
 
-  gcc_map = GccMap.new("./adc16_polling_frdmk22f.map")
-  # gcc_map = GccMap.new(ARGV[0])
-  gcc_map.summarize_symbol
-  gcc_map.print_region_summary
-  gcc_map.print_module_summary
+
+  print_help
