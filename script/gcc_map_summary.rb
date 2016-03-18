@@ -2,14 +2,14 @@
 
 #Define the section type
 SECTION_NONE = 0
-SECTION_RW_DATA = 1
-SECTION_ZI_DATA = 2
-SECTION_RO_DATA = 3
-SECTION_RO_CODE = 4
-SECTION_ISR_VECTOR = 5
-SECTION_FLASH_CONFIG = 6
-SECTION_STACK = 7
-SECTION_HEAP = 8
+SECTION_ISR_VECTOR = 1
+SECTION_FLASH_CONFIG = 2
+SECTION_RW_DATA = 3
+SECTION_ZI_DATA = 4
+SECTION_RO_DATA = 5
+SECTION_RO_CODE = 6
+SECTION_HEAP = 7
+SECTION_STACK = 8
 
 class GccMapSymbol
   @section_type#Int
@@ -136,7 +136,7 @@ class GccMap
   def initialize(file_name)
     @section_array = Array.new
     #Create a array contains 8 section types.
-    for section_type in SECTION_RW_DATA .. SECTION_HEAP
+    for section_type in SECTION_ISR_VECTOR .. SECTION_STACK
       gcc_map_section = GccMapSection.new(section_type)
       @section_array = (@section_array << gcc_map_section)
     end
@@ -208,7 +208,7 @@ class GccMap
 
       #Format the line content.
       case section_type
-      when SECTION_RW_DATA .. SECTION_FLASH_CONFIG
+      when SECTION_ISR_VECTOR, SECTION_FLASH_CONFIG .. SECTION_RO_CODE
         #Uniformly format the line content for the section except ".stack" and ".heap"
         #Check if the line has size field.
         symbol_attributes = line.split(" ")
@@ -225,7 +225,7 @@ class GccMap
         else
           gcc_map_symbol = nil
         end
-      when SECTION_STACK .. SECTION_HEAP
+      when SECTION_HEAP, SECTION_STACK
         symbol_attributes = line.split(" ")
         # puts symbol_attributes.to_s
       else
@@ -244,7 +244,7 @@ class GccMap
         else
           #The sections(.isr_vector, .flash_config, .stack, .heap) have no symbol. So set its symbol name as "Total".
           #Still keep the name of the symbols whose name is null in other sections as null.
-          if ((SECTION_ISR_VECTOR .. SECTION_HEAP) === section_type)
+          if ((SECTION_ISR_VECTOR == section_type) || (SECTION_FLASH_CONFIG == section_type) || ((SECTION_HEAP .. SECTION_STACK) === section_type))
             symbol_name = "Total"
           else
             symbol_name = ""
@@ -318,7 +318,7 @@ class GccMap
 
     def print_region_summary
       section_names = Array.new
-      section_names = (section_names << ".data" << ".bss" << ".rodata" << ".text" << ".isr_vector" << ".flash_config" << ".stack" << ".heap")
+      section_names = (section_names << ".isr_vector" << ".flash_config" << ".data" << ".bss" << ".rodata" << ".text" << ".heap" << ".stack")
       begin
         #Create a new file based on the original file name to save the summary result.
         result_file_name = (@file_name[0, @file_name.rindex(".")] + "_section.txt")
