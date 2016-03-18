@@ -168,7 +168,7 @@ class GccMap
     #Get section type of the line's symbol
     def get_section_type(line)
       #Get the section type from the line's symbol by checking if the beginning content of the line is ".data",
-      #".bss", ".text", ".rodata", ".isr_vector", ".flash_config", ".stack", ".heap" and if the line doesn't
+      #".bss", ".text", ".rodata", ".isr_vector", ".FlashConfig", ".stack", ".heap" and if the line doesn't
       #contain "load address"
       section_type = SECTION_NONE
       if((1 == (line=~/\.data/)) && (!(line=~/load address/)))
@@ -206,52 +206,24 @@ class GccMap
       #Get section type of the line's symbol
       section_type = get_section_type(line)
 
-      #Format the line content.
-      case section_type
-      when SECTION_ISR_VECTOR, SECTION_FLASH_CONFIG .. SECTION_RO_CODE
-        #Uniformly format the line content for the section except ".stack" and ".heap"
-        #Check if the line has size field.
+      if ((SECTION_ISR_VECTOR .. SECTION_STACK) === section_type)
+        #Uniformly format the line content
         symbol_attributes = line.split(" ")
-        #If line doesn't contain size field, add next line content.
-        if (1 == symbol_attributes.size)
-          line += file_handle.gets
-        end
+        #If line only contain "section type" and "symbol name" field, add next line content.
+        line += file_handle.gets if (1 == symbol_attributes.size)
         symbol_attributes = line.split(" ")
 
-        #Remove the lines whose size field is 0.
-        if (0 != symbol_attributes[2].to_i(16))
-          line = symbol_attributes.to_s
-          # puts symbol_attributes.to_s
+        #Get symbol name if line content has symbol name.
+        #The sections(.isr_vector, .FlashConfig, .stack, .heap) have no symbol. So set its symbol name as "Total".
+        #Still keep the name of the symbols whose name is null in other sections.
+        if (nil != symbol_attributes[0].index(".", 1))
+          symbol_name_pos = (symbol_attributes[0].index(".", 1) + 1)
+          symbol_name = symbol_attributes[0][symbol_name_pos, symbol_attributes[0].length]
+        elsif (true == [SECTION_ISR_VECTOR, SECTION_FLASH_CONFIG, SECTION_HEAP, SECTION_STACK].include?(section_type))
+          symbol_name = "Total"
         else
-          gcc_map_symbol = nil
+          symbol_name = ""
         end
-      when SECTION_HEAP, SECTION_STACK
-        symbol_attributes = line.split(" ")
-        # puts symbol_attributes.to_s
-      else
-        # puts "unknown section type!"
-        gcc_map_symbol = nil
-      end
-
-      #Generate the symbol object.
-      if (nil != gcc_map_symbol)
-        #Get symbol name.
-        #Split section name and symbol name from the first array element.
-        first_element = symbol_attributes[0]
-        if (nil != first_element.index(".", 1))
-          symbol_name_pos = (first_element.index(".", 1) + 1)
-          symbol_name = first_element[symbol_name_pos, first_element.length]
-        else
-          #The sections(.isr_vector, .flash_config, .stack, .heap) have no symbol. So set its symbol name as "Total".
-          #Still keep the name of the symbols whose name is null in other sections as null.
-          if ((SECTION_ISR_VECTOR == section_type) || (SECTION_FLASH_CONFIG == section_type) || ((SECTION_HEAP .. SECTION_STACK) === section_type))
-            symbol_name = "Total"
-          else
-            symbol_name = ""
-          end
-        end
-
-        #Get start address, size and module name.
         start_address = symbol_attributes[1].to_i(16)
         size = symbol_attributes[2].to_i(16)
         #Module name is null for stack and heap symbol
@@ -260,19 +232,14 @@ class GccMap
         else
           module_name = symbol_attributes[3]
         end
-        #Don't summary the symbol in the /lib/gcc/ directory
-        #Don't summary the symbol when the start address = 0 except for ISR Vector section.
-        if (!(module_name=~/\/lib\//) && ((0 != start_address) && (section_type != SECTION_ISR_VECTOR)) || (section_type == SECTION_ISR_VECTOR))
-          #Construct the symbol object.
-          # puts section_type.to_s
-          # puts symbol_name
-          # puts start_address.to_s(16)
-          # puts size.to_s(16)
-          # puts module_name
+        #Don't summary the symbols in the /lib/gcc/ directory, size is 0, start address is 0 except for ISR Vector section.
+        if ((0 != size) && !(module_name=~/\/lib\//) && ((0 != start_address) && (SECTION_ISR_VECTOR != section_type)) || (SECTION_ISR_VECTOR == section_type))
           gcc_map_symbol = GccMapSymbol.new(section_type, symbol_name, start_address, size, module_name)
         else
           gcc_map_symbol = nil
         end
+      else
+        gcc_map_symbol = nil
       end
 
       return gcc_map_symbol
@@ -329,7 +296,7 @@ class GccMap
           file_handle.printf("%-20s| %-50s| %20s| %20s| %-50s\r\n", "section type", "symbol name", "start_address", "size", "module_name")
           file_handle.printf("_________________________________________________________________________________________________________________________________________________________________\r\n")
           @section_array.each { |section|
-            #Avoid to print two times for .isr_vector, .flash_config, .stack, .heap.
+            #Avoid to print two times for .isr_vector, .FlashConfig, .stack, .heap.
             if ((SECTION_RW_DATA .. SECTION_RO_CODE) === section.get_type)
               file_handle.printf("%-20s| %-50s| %12s%08x| %20s| %-50s\r\n", section_names[section.get_type - 1], "Total",
                                  "0x", (section.get_start_address), ("0x" + section.get_size.to_s(16)), "")
