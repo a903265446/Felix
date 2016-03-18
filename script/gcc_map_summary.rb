@@ -170,30 +170,24 @@ class GccMap
       #Get the section type from the line's symbol by checking if the beginning content of the line is ".data",
       #".bss", ".text", ".rodata", ".isr_vector", ".FlashConfig", ".stack", ".heap" and if the line doesn't
       #contain "load address"
-      section_type = SECTION_NONE
       if((1 == (line=~/\.data/)) && (!(line=~/load address/)))
         section_type = SECTION_RW_DATA
-      end
-      if((1 == (line=~/\.bss/)) && (!(line=~/load address/)))
+      elsif((1 == (line=~/\.bss/)) && (!(line=~/load address/)))
         section_type = SECTION_ZI_DATA
-      end
-      if(1 == (line=~/\.rodata/))
+      elsif(1 == (line=~/\.rodata/))
         section_type = SECTION_RO_DATA
-      end
-      if(1 == (line=~/\.text/))
+      elsif(1 == (line=~/\.text/))
         section_type = SECTION_RO_CODE
-      end
-      if(1 == (line=~/\.isr_vector/))
+      elsif(1 == (line=~/\.isr_vector/))
         section_type = SECTION_ISR_VECTOR
-      end
-      if(1 == (line=~/\.FlashConfig/))
+      elsif(1 == (line=~/\.FlashConfig/))
         section_type = SECTION_FLASH_CONFIG
-      end
-      if(0 == (line=~/\.stack/))
+      elsif(0 == (line=~/\.stack/))
         section_type = SECTION_STACK
-      end
-      if(0 == (line=~/\.heap/))
+      elsif(0 == (line=~/\.heap/))
         section_type = SECTION_HEAP
+      else
+        section_type = SECTION_NONE
       end
 
       return section_type
