@@ -1,0 +1,128 @@
+/*
+@page drv_err Driver errors status
+ - #kStatus_SDMMC_NotSupportYet = 1800
+ - #kStatus_SDMMC_TransferFailed = 1801
+ - #kStatus_SDMMC_SetCardBlockSizeFailed = 1802
+ - #kStatus_SDMMC_HostNotSupport = 1803
+ - #kStatus_SDMMC_CardNotSupport = 1804
+ - #kStatus_SDMMC_AllSendCidFailed = 1805
+ - #kStatus_SDMMC_SendRelativeAddressFailed = 1806
+ - #kStatus_SDMMC_SendCsdFailed = 1807
+ - #kStatus_SDMMC_SelectCardFailed = 1808
+ - #kStatus_SDMMC_SendScrFailed = 1809
+ - #kStatus_SDMMC_SetDataBusWidthFailed = 1810
+ - #kStatus_SDMMC_GoIdleFailed = 1811
+ - #kStatus_SDMMC_HandShakeOperationConditionFailed = 1812
+ - #kStatus_SDMMC_SendApplicationCommandFailed = 1813
+ - #kStatus_SDMMC_SwitchFailed = 1814
+ - #kStatus_SDMMC_StopTransmissionFailed = 1815
+ - #kStatus_SDMMC_WaitWriteCompleteFailed = 1816
+ - #kStatus_SDMMC_SetBlockCountFailed = 1817
+ - #kStatus_SDMMC_SetRelativeAddressFailed = 1818
+ - #kStatus_SDMMC_SwitchHighSpeedFailed = 1819
+ - #kStatus_SDMMC_SendExtendedCsdFailed = 1820
+ - #kStatus_SDMMC_ConfigureBootFailed = 1821
+ - #kStatus_SDMMC_ConfigureExtendedCsdFailed = 1822
+ - #kStatus_SDMMC_EnableHighCapacityEraseFailed = 1823
+ - #kStatus_SDMMC_SendTestPatternFailed = 1824
+ - #kStatus_SDMMC_ReceiveTestPatternFailed = 1825
+*/
+
+/*!
+@defgroup CARD Secured Digital Card/Embedded MultiMedia Card (CARD)
+@details The Kinetis SDK provides a driver to access the Secured Digital Card
+and Embedded MultiMedia Card based on the SDHC driver.
+
+# Function groups
+
+## SDCARD Function {#SDCARDFunctional}
+
+This function group implements the SD card functional API.
+
+## MMCCARD Function {#MMCCARDFunctional}
+
+This function group implements the MMC card functional API.
+
+# Typical use case
+
+## SD CARD Operation {#SDCardOperation}
+
+~~~~~{.c}    
+    /* Initialize SDHC. */
+    sdhcConfig->cardDetectDat3 = false;
+    sdhcConfig->endianMode = kSDHC_EndianModeLittle;
+    sdhcConfig->dmaMode = kSDHC_DmaModeAdma2;
+    sdhcConfig->readWatermarkLevel = 0x80U;
+    sdhcConfig->writeWatermarkLevel = 0x80U;
+    SDHC_Init(BOARD_SDHC_BASEADDR, sdhcConfig);
+
+    /* Save host information. */
+    card->host.base = BOARD_SDHC_BASEADDR;
+    card->host.sourceClock_Hz = CLOCK_GetFreq(BOARD_SDHC_CLKSRC);
+    card->host.transfer = SDHC_TransferFunction;
+
+    /* Init card. */
+    if (SD_Init(card))
+    {
+        PRINTF("\r\nSD card init failed.\r\n");
+    }
+
+    while (true)
+    {                    
+        if (kStatus_Success != SD_WriteBlocks(card, g_dataWrite, DATA_BLOCK_START, DATA_BLOCK_COUNT))
+        {
+            PRINTF("Write multiple data blocks failed.\r\n");
+        }
+        if (kStatus_Success != SD_ReadBlocks(card, g_dataRead, DATA_BLOCK_START, DATA_BLOCK_COUNT))
+        {
+            PRINTF("Read multiple data blocks failed.\r\n");
+        }
+        
+        if (kStatus_Success != SD_EraseBlocks(card, DATA_BLOCK_START, DATA_BLOCK_COUNT))
+        {
+            PRINTF("Erase multiple data blocks failed.\r\n");
+        }
+    }
+    
+    SD_Deinit(card);
+
+~~~~~
+## MMC CARD Operation {#MMCCardOperation}
+
+~~~~~{.c}
+    /* Initialize SDHC. */
+    sdhcConfig->cardDetectDat3 = false;
+    sdhcConfig->endianMode = kSDHC_EndianModeLittle;
+    sdhcConfig->dmaMode = kSDHC_DmaModeAdma2;
+    sdhcConfig->readWatermarkLevel = 0x80U;
+    sdhcConfig->writeWatermarkLevel = 0x80U;
+    SDHC_Init(BOARD_SDHC_BASEADDR, sdhcConfig);
+
+    /* Save host information. */
+    card->host.base = BOARD_SDHC_BASEADDR;
+    card->host.sourceClock_Hz = CLOCK_GetFreq(BOARD_SDHC_CLKSRC);
+    card->host.transfer = SDHC_TransferFunction;
+
+    /* Init card. */
+    if (MMC_Init(card))
+    {
+        PRINTF("\n MMC card init failed \n");
+    }
+
+    while (true)
+    {            
+        if (kStatus_Success != MMC_WriteBlocks(card, g_dataWrite, DATA_BLOCK_START, DATA_BLOCK_COUNT))
+        {
+            PRINTF("Write multiple data blocks failed.\r\n");
+        }
+        if (kStatus_Success != MMC_ReadBlocks(card, g_dataRead, DATA_BLOCK_START, DATA_BLOCK_COUNT))
+        {
+            PRINTF("Read multiple data blocks failed.\r\n");
+        }
+    }
+    
+    MMC_Deinit(card);
+~~~~~
+
+*/
+

@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!-- This file is maintained by software component support author -->
+<metadata>
+  <components>
+    <component name="middleware.sdmmc.support" requires="platform.drivers.sdhc">
+      <source path="./">
+        <files mask="*.meta"/>
+      </source>
+    </component>
+    <component name="middleware.sdmmc.support" requires="platform.drivers.dspi"/>
+    <component name="middleware.sdmmc.support" requires="platform.drivers.spi"/>
+    <component name="middleware.sdmmc" requires="middleware.sdmmc.support" provides="middleware" type="middleware" version="2.1.1">
+      <source path="./inc">
+        <files mask="*.h"/>
+      </source>
+      <source path="./src">
+        <files mask="*.c"/>
+      </source>
+      <source path="./">
+        <files mask="*.meta"/>
+      </source>
+    </component>
+  </components>
+</metadata>

@@ -1,0 +1,61 @@
+<?xml version="1.0"?>
+<!-- This file is maintained by software component support author -->
+<metadata>
+  <components>
+    <component name="middleware.fatfs" provides="middleware" type="middleware" version="0.11">
+      <source path="./doc">
+        <files mask="*.meta"/>
+      </source>
+      <source path="./doc">
+        <files mask="*.css"/>
+        <files mask="*.html"/>
+      </source>
+      <source path="./doc/en">
+        <files mask="*.html"/>
+      </source>
+      <source path="./doc/img">
+        <files mask="*.c"/>
+        <files mask="*.png"/>
+        <files mask="*.zip"/>
+      </source>
+      <source path="./doc/ja">
+        <files mask="*.html"/>
+      </source>
+      <source path="./src">
+        <files mask="*.c"/>
+        <files mask="*.h"/>
+        <files mask="*.txt"/>
+      </source>
+      <source path="./src/fsl_mmc_disk">
+        <files mask="*.c"/>
+        <files mask="*.h"/>
+      </source>
+      <source path="./src/fsl_option">
+        <files mask="*.c"/>
+      </source>
+      <source path="./src/fsl_sd_disk">
+        <files mask="*.c"/>
+        <files mask="*.h"/>
+      </source>
+      <source path="./src/fsl_sdspi_disk">
+        <files mask="*.c"/>
+        <files mask="*.h"/>
+      </source>
+      <source path="./src/fsl_ram_disk">
+        <files mask="*.c"/>
+        <files mask="*.h"/>
+      </source>
+      <source path="./src/fsl_usb_disk">
+        <files mask="*.c"/>
+        <files mask="*.h"/>
+      </source>
+      <source path="./src/option">
+        <files mask="*.c"/>
+      </source>
+      <source path="./">
+        <files mask="*.meta"/>
+        <files mask="*.txt"/>
+      </source>
+    </component>
+  </components>
+</metadata>

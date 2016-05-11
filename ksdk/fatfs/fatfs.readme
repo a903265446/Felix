@@ -1,0 +1,46 @@
+--- FatFs integration notes ---
+Original package is available at http://elm-chan.org/fsw/ff/00index_e.html. Supported version can be
+found in Kinetis SDK Release notes document.
+
+Original FatFs folder structure
+ff
+  ├ doc
+  │  ├ en
+  │  ├ img
+  │  └ ja
+  └ src
+     └ option
+
+SDK FatFs folder structure
+fatfs
+  ├ doc
+  │  ├ en
+  │  ├ img
+  │  └ ja
+  └ src
+     ├ fsl_mmc_disk
+     ├ fsl_option
+     ├ fsl_ram_disk
+     ├ fsl_sd_disk
+     ├ fsl_sdspi_disk
+     ├ fsl_usb_disk
+     └ option
+
+ChaN's FatFs package in SDK is modified in two major areas:
+    - Add glue functions for low level drivers (SDHC, SDSPI, RAM disk, MMC).
+      Modified diskio.c
+    - Add RTOS wrappers to make FatFs thread safe.
+      Modified syscall.c
+
+Another minor changes:
+    - rename of ffconf.h to ffconf_template.h. Each application should contain its own ffconf.h.
+    - Add #include "ffconf.h" to diskio.c. This enable selection of physical disk from ffconf.h by
+      appropriate macro definition.
+    - conditional compilation of physical disk interfaces in diskio.c e.g.:
+      #ifdef RAM_DISK_ENABLE
+      #include "fsl_ram_disk.h"
+      #endif
+
+Configuration:
+Each FatFs application contains application dependent configuration file ffconf.h based
+on template ffconf.h in src folder.

@@ -1,0 +1,24 @@
+/*!
+@page middleware_log Middleware Change Log
+
+@section sdmmc SDMMC for KSDK
+  Current driver version is 2.1.1
+
+  - 2.1.0
+    - Bug Fix:
+      - Change the callback mechanism when sending a command;
+      - Fix the performance low issue when transferring data;
+    - Other changes:
+      - Change the name of some error codes returned by internal function;
+      - Merge all host related attributes to one structure;
+      - Optimize the function of setting maxmium data bus width for MMC card;
+
+  - 2.1.1
+    - Bug Fix:
+      - Fix the block range boundry error when transferring data to MMC card;
+      - Fix the bit mask error in the SD card switch to high speed function;
+    - Other changes:
+      - Add error code to indicate that SDHC ADMA1 transfer type is not supported yet;
+      - Optimize the SD card initialization function;
+
+*/
